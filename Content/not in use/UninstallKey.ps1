@@ -1,0 +1,2 @@
+﻿# Currently installed software by uninstall key
+Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* |  Select-Object DisplayName, DisplayVersion, Publisher, InstallDate|format-table -AutoSize -Wrap

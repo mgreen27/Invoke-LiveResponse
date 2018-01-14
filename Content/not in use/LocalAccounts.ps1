@@ -1,0 +1,2 @@
+﻿# Local Account enumeration
+Get-WmiObject -Class Win32_UserAccount -Namespace "root\cimv2" -ErrorAction SilentlyContinue | select Name,Domain,SID,Disabled,Status,LockOut | format-table -AutoSize -Wrap
