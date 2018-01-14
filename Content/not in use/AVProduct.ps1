@@ -1,0 +1,2 @@
+﻿# AV product
+Get-WmiObject -Namespace root\SecurityCenter2 -Class AntiVirusProduct -ErrorAction SilentlyContinue | select displayname,instanceguid,pathtosignedproductexe,pathtosignedreportingexe,productstate,timestamp
