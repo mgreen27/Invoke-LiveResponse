@@ -3,7 +3,7 @@
     A script to download and install Powerforensics and Invoke-LiveResponse in users Powershell profile
 
     Name: Get-Forensicating.ps1
-    Version: 1.0
+    Version: 1.1
 
 .DESCRIPTION
     Remove old versions of Invoke-LiveResponse if exist.
@@ -56,6 +56,8 @@
 .NOTES
     
 #>
+
+Set-ExecutionPolicy -ExecutionPolicy bypass -Force
 
 function Expand-ZIPFile($file, $destination)
 {
