@@ -37,6 +37,7 @@ function Expand-ZIPFile($file, $destination)
     }
 }
 
+Set-ExecutionPolicy -ExecutionPolicy bypass -Force
 
 # Remove Powerforensics
 Remove-Module Powerforensics -ErrorAction SilentlyContinue

@@ -615,7 +615,7 @@
         
     Try{
         Write-Host "`tStarting PSSession on $ComputerName " -NoNewline
-        If(!$SSL){
+        If(!use$SSL){
             $Session = New-PSSession -ComputerName $ComputerName -Port $Port -Credential $Credential -Authentication $Authentication -SessionOption (New-PSSessionOption -NoMachineProfile) -ErrorAction Stop
         }
         ElseIf($useSSL){
