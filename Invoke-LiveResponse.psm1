@@ -5,7 +5,7 @@
     A Module for Live Response and Forensic collections over WinRM. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.4
+    Version: 0.5
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
@@ -67,12 +67,15 @@
 .PARAMETER Copy
     Specifies Files to collect for Forensic Collection Copy-Item Mode in comma seperated format.
     As the name suggests, Copy-Item Mode copies files using Powershell CopyItem instead of Powerforensics.
-    Copy-Item is not subject to Powerforensics filesize bug. Quotes reccomended for long path, required for csv
+    Quotes reccomended for long path, required for csv
     e.g     -Copy "C:\Users\<user>\AppData\Local\Temp\evil.vbs"
     or      -Copy "C:\Users\<user>\AppData\Local\Temp\evil.vbs,C:\Windows\System32\evil.exe"
 
 .PARAMETER All
-    Optional parameter to select All collection items for Forensic Copy Mode.
+    Optional parameter to select All collection items for ForensicCopy Mode.
+
+.PARAMETER Mem
+    Optional parameter to select Memory collection for ForensicCopy Mode. Default uses Winpmem - winpmem-2.1.post4.exe (latest and greatest) which is requried on UNC path
 
 .PARAMETER Disk
     Optional parameter Forensic Copy Mode to select collection of $MFT, UsnJournal:$J and $LogFile.
@@ -155,6 +158,7 @@
 .LINK
     https://github.com/Invoke-IR/PowerForensics
     https://github.com/mgreen27/Powershell-IR
+    https://github.com/google/rekall/releases/tag/v1.5.1
     
 .NOTES
     Assuming WinRM configured appropriately, credential risk is mitigated with Kerberos delegation
@@ -162,6 +166,7 @@
     Currently either open share or hardcoded auth for netuse command in scriptblock.
     Do not turn CredSSP on for IR use cases! Best practice would be to create a local account with access to the share and utilise those credentials in script.
     Powershell 5.0+ allows for "Copy-Item -FromSession" over PSSession to reduce the need for "Net use".
+    Winpmem-2.1.post4.exe can be downloaded from https://github.com/google/rekall/releases/tag/v1.5.1 and needs to be placed in UNC path specified in ForensicCOpy mode.
 #>
     [CmdletBinding()]
     Param(
@@ -175,6 +180,7 @@
         [Parameter(Mandatory = $False)][String]$Raw,
         [Parameter(Mandatory = $False)][String]$Copy,
         [Parameter(Mandatory = $False)][Switch]$All,
+        [Parameter(Mandatory = $False)][Switch]$Mem,
         [Parameter(Mandatory = $False)][Switch]$Disk,
         [Parameter(Mandatory = $False)][Switch]$Mft,
         [Parameter(Mandatory = $False)][Switch]$Usnj,
@@ -188,13 +194,14 @@
         [Parameter(Mandatory = $False)][Switch]$Csv,
         [Parameter(Mandatory = $False)][Switch]$Shell
         )
-    
+
     # Set switches
     $Shell = $PSBoundParameters.ContainsKey('Shell')
     $useSSL = $PSBoundParameters.ContainsKey('useSSL')
 
     # Forensic Collection
     $All = $PSBoundParameters.ContainsKey('All')
+    $Mem = $PSBoundParameters.ContainsKey('Mem')
     $Disk = $PSBoundParameters.ContainsKey('Disk')
     $Evtx = $PSBoundParameters.ContainsKey('Evtx')
     $Mft = $PSBoundParameters.ContainsKey('Mft')
@@ -219,22 +226,22 @@
     If (!$Content){$Content = "$ScriptDir\Content"}
 
     # Input validation
-    If ($Raw -Or $Copy -Or $Mft -Or $Usnj -Or $Pf -Or $Reg -Or $Evtx -Or $User -Or $Disk -Or $All){
+    If ($Raw -Or $Copy -Or $Mft -Or $Usnj -Or $Pf -Or $Reg -Or $Evtx -Or $User -Or $Disk -Or $Mem -Or $All){
         $ForensicCopy = $True
         If (!$Map){$Map = $True}
         If (!$UNC){$UNC = $True}
-        $Map = Start-InputValidation -Map $Map
-        $UNC = Start-InputValidation -UNC $UNC
+        $Map = Invoke-InputValidation -Map $Map
+        $UNC = Invoke-InputValidation -UNC $UNC
     }
 
     If ($LR){
-        $Results = Start-InputValidation -Results $Results
-        $Content = Start-InputValidation -Content $Content
+        $Results = Invoke-InputValidation -Results $Results
+        $Content = Invoke-InputValidation -Content $Content
     }
 
-    # Other variables
+    # Other variables -$Output needs to be passed into scriptblock.
     $Results = "$Results\$date`Z_"
-    $Output = "`$output = `"$Map\$date`Z_`" + `$env:computername"
+    $Output = "`$Output = `"$Map\$date`Z_`" + `$env:computername"
     $PowerForensics = $False
 
     # Shell mode 
@@ -279,6 +286,24 @@
     $sbPath =  [ScriptBlock]::Create("`ncmd /c net use $Map $UNC > null 2>&1`nIf(!(Test-Path $Map)){`"Error: Check UNC path and credentials. Unable to Map $Map``n`";break}`n" + $Output + "`n" + $sbPath.ToString())
     
     $Scriptblock = [ScriptBlock]::Create($sbPriority.ToString() + $sbPath.ToString())
+
+    # MemoryDump
+    If ($Mem -Or $All){
+        $sbMemory = {
+            $MemDumpTool = (get-item $Output).parent.fullname + "winpmem-2.1.post4.exe"
+            If (Test-Path $MemDumpTool){
+                try{
+                    If(Test-Path $Output\memory.zip){Remove-Item "$Output\memory.zip" -Recurse -Force -ErrorAction SilentlyContinue | Out-Nul}
+                    Write-Host -ForegroundColor Yellow "`tCollecting Memory"
+                    cmd /c "$MemDumpTool --format raw -o $Output\memory.zip > null 2>&1"
+                }
+                Catch{Write-Host "`tError: MemoryDump."}
+            }
+            Else{Write-Host "`tError: $MemDumpTool not found at UNC path. See help for download details."}
+        }
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbMemory.ToString())
+        $ForensicCopyText = $ForensicCopyText + "`t`t`Memory Dump`n"
+    }
 
 
     # PowerForensics - reflectively loads PF into remote machine if Raw collection configured
@@ -416,15 +441,13 @@
             If (Get-ChildItem -Path $env:systemdrive\Windows\Prefetch\*.pf -ErrorAction SilentlyContinue){
                 If (! (Test-Path $Output\prefetch)){
                     New-Item ($Output + "\prefetch") -type directory | Out-Null
-                    Write-Host -ForegroundColor Yellow "`tCollecting Prefecth"
                 }
-
+                Write-Host -ForegroundColor Yellow "`tCollecting Prefecth"
                 Copy-Item -Path $env:systemdrive\Windows\Prefetch\*.pf -Destination ($Output + "\prefetch\") -ErrorAction SilentlyContinue
             }
             Else{
                 Write-Host -ForegroundColor Yellow "`tNo pf files found"
             }
-            [gc]::collect()
         }
 
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPf.ToString())
@@ -633,6 +656,20 @@
         Break
     }
 
+    If($ForensicCopy){
+        Write-Host -ForegroundColor Cyan "`nStarting ForensicCopy over WinRM..."
+        Write-Host "`tUNC Path: " $UNC.split()[0]
+        Write-Host "`tAs $Map\$date`Z_$Target`n"
+        Write-Host $ForensicCopyText
+
+        # Load powerforensics for Raw collections
+        If ($PowerForensics){Import-Module -Name Powerforensics}
+
+        # Execute collated scriptblock
+        Invoke-Command -Session $Session -Verbose -Scriptblock $Scriptblock
+
+        Write-Host -ForegroundColor Cyan "ForensicCopy over WinRM complete`n"
+    }
     
     If($LR){
         Write-Host -ForegroundColor Cyan "`nStarting LiveResponse over WinRM..."
@@ -680,21 +717,6 @@
 
         Write-Host -ForegroundColor Cyan "`nLiveResponse over WinRM complete`n"
     }
-
-     If($ForensicCopy){
-        Write-Host -ForegroundColor Cyan "`nStarting ForensicCopy over WinRM..."
-        Write-Host "`tUNC Path: " $UNC.split()[0]
-        Write-Host "`tAs $Map\$date`Z_$Target`n"
-        Write-Host $ForensicCopyText
-
-        # Load powerforensics for Raw collections
-        If ($PowerForensics){Import-Module -Name Powerforensics}
-        
-        # Execute collated scriptblock
-        Invoke-Command -Session $Session -Scriptblock $Scriptblock
-        
-        Write-Host -ForegroundColor Cyan "ForensicCopy over WinRM complete`n"
-    }
                         
     If($Shell){
         Write-Host -NoNewline "`nTo access PSSession shell on $ComputerName, please run "
@@ -716,7 +738,7 @@
 
 
 
-function Start-InputValidation
+function Invoke-InputValidation
 {
     [CmdletBinding()]
     Param(
