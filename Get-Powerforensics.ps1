@@ -3,7 +3,7 @@
     A script to download and install PowerForensics in users Powershell profile
 
     Name: Get-Powerforensics.ps1
-    Version: 1.1
+    Version: 1.11
 
 .DESCRIPTION
     Remove old versions of Powerforensics if exist.
@@ -12,7 +12,8 @@
     Show installed modules.
 .EXAMPLE
     # download
-    $url="<URL of raw.githubusercontent Get-Powerforensics.ps1>"
+    $url="<https://raw.githubusercontent.com/mgreen27/Powershell-IR/master/Get-Powerforensics.ps1>"
+    [Net.ServicePointManager]::SecurityProtocol = "tls12, tls11, tls"
     $WebClient=(New-Object System.Net.WebClient)
     $WebClient.Proxy=[System.Net.WebRequest]::GetSystemWebProxy()
     $WebClient.Proxy.Credentials=[System.Net.CredentialCache]::DefaultNetworkCredentials
@@ -57,6 +58,7 @@ Try{
         Remove-Item "$target\powerforensics.zip" -Force -ErrorAction SilentlyContinue
     }
 
+    [Net.ServicePointManager]::SecurityProtocol = "tls12, tls11, tls"
     $webclient=(New-Object System.Net.WebClient)
     $webclient.Proxy=[System.Net.WebRequest]::GetSystemWebProxy()
     $webclient.Proxy.Credentials=[System.Net.CredentialCache]::DefaultNetworkCredentials
