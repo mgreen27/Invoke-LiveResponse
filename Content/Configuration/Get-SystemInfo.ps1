@@ -1,17 +1,15 @@
 ﻿<#
 .SYNOPSIS
-Get Complete details of any machine
+    Get Complete details of any machine
 
 .DESCRIPTION
-This function uses WMI class to grab relevant details
-
-Code adapted from http://sqlpowershell.wordpress.com
+    This function uses WMI class to grab relevant details
 
 .EXAMPLE 
-Get-SystemInfo
+    Get-SystemInfo
 
 .NOTES
-
+    Code adapted from http://sqlpowershell.wordpress.com
 .LINK
 
 #>
@@ -113,14 +111,14 @@ $wmi = $null
 # Get operating system and memory info from WMI
 if ($wmi = Get-WmiObject -Class Win32_OperatingSystem -ErrorAction SilentlyContinue) {
         
-    $data."OS Boot Time"     = $wmi.ConvertToDateTime($wmi.LastBootUpTime)
+    $data."OS Boot Time"     = Get-Date $wmi.ConvertToDateTime($wmi.LastBootUpTime) -format U
     $data."OS System Drive"  = $wmi.SystemDrive
     $data."OS System Device" = $wmi.SystemDevice
     $data."OS Language"      = $wmi.OSLanguage
     $data."OS Version"       = $wmi.Version
     $data."OS Windows dir"   = $wmi.WindowsDirectory
     $data."OS Name"          = $wmi.Caption
-    $data."OS Install Date"  = $wmi.ConvertToDateTime($wmi.InstallDate)
+    $data."OS Install Date"  = Get-Date $wmi.ConvertToDateTime($wmi.InstallDate) -format U
     $data."OS Service Pack"  = [string]$wmi.ServicePackMajorVersion + "." + $wmi.ServicePackMinorVersion
     
     $wmi | Foreach {
