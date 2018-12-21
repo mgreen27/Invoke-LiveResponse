@@ -310,7 +310,7 @@
     # MemoryDump
     If ($Mem -Or $All){
         $sbMemory = {
-            $MemDumpTool = (get-item $Output).parent.fullname + "winpmem-2.1.post4.exe"
+            $MemDumpTool = (get-item $Output).parent.fullname + "\winpmem-2.1.post4.exe"
             If (Test-Path $MemDumpTool){
                 try{
                     If(Test-Path $Output\memory.zip){Remove-Item "$Output\memory.zip" -Recurse -Force -ErrorAction SilentlyContinue | Out-Nul}
