@@ -113,6 +113,9 @@
     Optional Forensic Copy Mode parameter to select collection of User artefacts and registry hive files 
     Currently includes ntuser.dat and UsrClass.dat
 
+.PARAMETER Recbin
+    Optional Forensic Copy mode parameter to retrieve recycle bin artefacts.
+
 .PARAMETER LR
     An optional parameter to select Live Response mode. LiveResponse mode will execute any Powershell scripts placed inside a content folder and output to a Results folder on the collector machine.
     
@@ -208,6 +211,7 @@
         [Parameter(Mandatory = $False)][Switch]$Reg,
         [Parameter(Mandatory = $False)][Switch]$Evtx,
         [Parameter(Mandatory = $False)][Switch]$User,
+        [Parameter(Mandatory = $False)][Switch]$Recbin,
         [Parameter(Mandatory = $False)][Switch]$LR,
         [Parameter(Mandatory = $False)][String]$Content,
         [Parameter(Mandatory = $False)][String]$Results,
@@ -229,6 +233,7 @@
     $Pf = $PSBoundParameters.ContainsKey('Pf')
     $Reg = $PSBoundParameters.ContainsKey('Reg')
     $User = $PSBoundParameters.ContainsKey('User')
+    $Recbin = $PSBoundParameters.ContainsKey('Recbin')
 
     # Live Response
     $LR = $PSBoundParameters.ContainsKey('LR')
@@ -246,7 +251,7 @@
     If (!$Content){$Content = "$ScriptDir\Content"}
 
     # Input validation
-    If ($Raw -Or $Copy -Or $Mft -Or $Usnj -Or $Pf -Or $Reg -Or $Evtx -Or $User -Or $Disk -Or $Mem -Or $All){
+    If ($Raw -Or $Copy -Or $Mft -Or $Usnj -Or $Pf -Or $Reg -Or $Evtx -Or $User -Or $Recbin -Or $Disk -Or $Mem -Or $All){
         $ForensicCopy = $True
 		If (!$LocalOut) {
 			If (!$Map){$Map = $True}
@@ -334,7 +339,7 @@
 
 
     # PowerForensics - reflectively loads PF into remote machine if Raw collection configured
-    If ($Raw -Or $Mft -Or $Usnj -Or $Evtx -Or $Reg -Or $User -Or $Disk -Or $All){
+    If ($Raw -Or $Mft -Or $Usnj -Or $Evtx -Or $Reg -Or $User -Or $Recbin -Or $Disk -Or $All){
         $sbPowerForensics = {
             function Add-PowerForensicsType
             {
@@ -599,6 +604,44 @@
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbUser.ToString())
         $ForensicCopyText = $ForensicCopyText + "`t`tUser Artefacts`n"
     }
+
+    # Recycle bin collection
+    If ($Recbin -Or $All){
+        $sbRecbin = {
+            If (! (Test-Path $Output\recbin)){
+                New-Item ($Output + "\recbin") -type directory | Out-Null
+                Write-Host -ForegroundColor Yellow "`tCollecting Recycle Bin Artefacts"
+            }
+            
+            # collect list of available drives
+            $Drives = @()
+            Get-WmiObject win32_logicaldisk | Select-Object -Property DeviceID | Foreach-Object -Process { $Drives += $_.DeviceID }
+
+            $RecbinFiles = @()
+            foreach ( $Drive in $Drives ) {
+                $RecbinFiles += Get-ChildItem -Path "$Drive\`$Recycle.Bin\" -recurse -force -ErrorAction SilentlyContinue -File -Exclude desktop.ini | Select-Object -Property FullName
+            }
+
+            foreach ( $Rfile in $RecbinFiles ) {
+                $Rfile = $Rfile.FullName
+                
+                # match source folders
+                $Rfolder = Split-Path -Path $Rfile -Parent | Split-Path -NoQualifier
+	
+                If (! (Test-Path ($Output + "\recbin\" + $Rfolder)) ) {
+                    New-Item ($Output + "\recbin\" + $Rfolder) -type directory | Out-Null
+                }
+
+                $TempFilename = Split-Path -Leaf $Rfile
+				New-Item -ItemType File -Path ($Output + "\recbin\" + $Rfolder + "\" + $TempFilename) -Force | Out-Null
+				Try{Copy-Item -Path $Rfile -Destination ($Output + "\recbin\" + $Rfolder + "\" + $TempFilename) | Out-Null}
+                Catch{Write-Host "`tError: Powershell $Rfile copy failed."}
+            }
+        }
+    }
+
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbRecbin.ToString())
+        $ForensicCopyText = $ForensicCopyText + "`t`tRecycle Bin Artefacts`n"    
 
 
     # Copy-Item scriptblock needs to be generated at build time
