@@ -58,13 +58,6 @@
     or      -UNC "\\<UNC>\<Share> /user:<domain>\<shareuser> <sharepassword>"
             Quotes required for long command. Input is validated.
 
-.PARAMETER LocalOut
-	Specifies a local folder on the remote system as a destination for Forensic Collection results.
-    Use in place of -Map and -UNC flags.
-    Note: Do not use lightly! Writing this data to a local drive *will* overwrite some slack space. 
-    Should be used only as a last resort for data collection, such as when shares are unavailable. 
-	e.g.	-LocalOut "C:\tmp\collection"
-
 .PARAMETER Raw
     Specifies Files to collect for Forensic Collection Mode in comma seperated format.
     File will leverage Powerforensics to raw copy items. Quotes reccomended for long path, required for csv.
@@ -82,7 +75,7 @@
     Optional parameter to select All collection items for ForensicCopy Mode.
 
 .PARAMETER Mem
-    Optional parameter to select Memory collection for ForensicCopy Mode. Default uses Winpmem - winpmem-2.1.post4.exe (latest and greatest) which is requried on UNC path or LocalOut path.
+    Optional parameter to select Memory collection for ForensicCopy Mode. Default uses Winpmem - winpmem-2.1.post4.exe (latest and greatest) which is requried on UNC path
 
 .PARAMETER Disk
     Optional parameter Forensic Copy Mode to select collection of $MFT, UsnJournal:$J and $LogFile.
@@ -173,7 +166,7 @@
     Currently either open share or hardcoded auth for netuse command in scriptblock.
     Do not turn CredSSP on for IR use cases! Best practice would be to create a local account with access to the share and utilise those credentials in script.
     Powershell 5.0+ allows for "Copy-Item -FromSession" over PSSession to reduce the need for "Net use".
-    Winpmem-2.1.post4.exe can be downloaded from https://github.com/google/rekall/releases/tag/v1.5.1 and needs to be placed in UNC path or LocalOut path specified in ForensicCopy mode.
+    Winpmem-2.1.post4.exe can be downloaded from https://github.com/google/rekall/releases/tag/v1.5.1 and needs to be placed in UNC path specified in ForensicCOpy mode.
 
     Thank you to:
         @jaredcatkinson PowerForensics - https://github.com/Invoke-IR/PowerForensics
@@ -189,7 +182,6 @@
         [Parameter(Mandatory = $False)][Switch]$useSSL,
         [Parameter(Mandatory = $False)][String]$Map,
         [Parameter(Mandatory = $False)][String]$UNC,
-        [Parameter(Mandatory = $False)][String]$LocalOut,
         [Parameter(Mandatory = $False)][String]$Raw,
         [Parameter(Mandatory = $False)][String]$Copy,
         [Parameter(Mandatory = $False)][Switch]$All,
@@ -241,15 +233,10 @@
     # Input validation
     If ($Raw -Or $Copy -Or $Mft -Or $Usnj -Or $Pf -Or $Reg -Or $Evtx -Or $User -Or $Disk -Or $Mem -Or $All){
         $ForensicCopy = $True
-		If (!$LocalOut) {
-			If (!$Map){$Map = $True}
-			If (!$UNC){$UNC = $True}
-			$Map = Invoke-InputValidation -Map $Map
-			$UNC = Invoke-InputValidation -UNC $UNC
-		}
-		Else {
-			$Map = $LocalOut
-		}
+        If (!$Map){$Map = $True}
+        If (!$UNC){$UNC = $True}
+        $Map = Invoke-InputValidation -Map $Map
+        $UNC = Invoke-InputValidation -UNC $UNC
     }
 
     If ($LR){
@@ -300,17 +287,15 @@
         }
     }
 
-    if (!$LocalOut) {
-		#Ugly, to look into optimisation in future
-		$sbPath =  [ScriptBlock]::Create("`ncmd /c net use $Map $UNC > null 2>&1`nIf(!(Test-Path $Map)){`"Error: Check UNC path and credentials. Unable to Map $Map``n`";break}`n" + $Output + "`n" + $sbPath.ToString())
-    }
-        
+    #Ugly, to look into optimisation in future
+    $sbPath =  [ScriptBlock]::Create("`ncmd /c net use $Map $UNC > null 2>&1`nIf(!(Test-Path $Map)){`"Error: Check UNC path and credentials. Unable to Map $Map``n`";break}`n" + $Output + "`n" + $sbPath.ToString())
+    
     $Scriptblock = [ScriptBlock]::Create($sbPriority.ToString() + $sbPath.ToString())
 
     # MemoryDump
     If ($Mem -Or $All){
         $sbMemory = {
-            $MemDumpTool = (get-item $Output).parent.fullname + "\winpmem-2.1.post4.exe"
+            $MemDumpTool = (get-item $Output).parent.fullname + "winpmem-2.1.post4.exe"
             If (Test-Path $MemDumpTool){
                 try{
                     If(Test-Path $Output\memory.zip){Remove-Item "$Output\memory.zip" -Recurse -Force -ErrorAction SilentlyContinue | Out-Nul}
@@ -653,10 +638,11 @@
     }
 
     # Unmap share
-    if (!$LocalOut) {
-		$sbUnMap = [ScriptBlock]::Create("`tnet use " + $Map + " /DELETE /Y | Out-Null")	
-		$Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbUnMap.ToString())
-	}
+    $sbUnMap = [ScriptBlock]::Create("`tnet use " + $Map + " /DELETE /Y | Out-Null")
+    
+    $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbViewCollection.ToString() + $sbUnMap.ToString()) 
+
+
 
     #### Main ####
     Write-Host -ForegroundColor Cyan "`nInvoke-LiveResponse"
