@@ -58,6 +58,19 @@
     or      -UNC "\\<UNC>\<Share> /user:<domain>\<shareuser> <sharepassword>"
             Quotes required for long command. Input is validated.
 
+.PARAMETER LocalOut
+	Specifies a local folder on the remote system as a destination for Forensic Collection results.
+    Use in place of -Map and -UNC flags.
+    Note: Do not use lightly! Writing this data to a local drive *will* overwrite some slack space. 
+    Should be used only as a last resort for data collection, such as when shares are unavailable. 
+    e.g.	-LocalOut "C:\tmp\collection"
+    
+.PARAMETER WriteScriptBlock
+    Writes a .ps1 file containing the script that would be run on the remote host.
+    Note: Does not connect to the remote host.
+    Useful for troubleshooting or for creating a script that will be manually run on a host without WinRM configured.
+    Script will be located in the current working directory (Get-Location) and will be named: <date>_<target computer name>_ForensicCopy_script.ps1
+
 .PARAMETER Raw
     Specifies Files to collect for Forensic Collection Mode in comma seperated format.
     File will leverage Powerforensics to raw copy items. Quotes reccomended for long path, required for csv.
@@ -75,7 +88,7 @@
     Optional parameter to select All collection items for ForensicCopy Mode.
 
 .PARAMETER Mem
-    Optional parameter to select Memory collection for ForensicCopy Mode. Default uses Winpmem - winpmem-2.1.post4.exe (latest and greatest) which is requried on UNC path
+    Optional parameter to select Memory collection for ForensicCopy Mode. Default uses Winpmem - winpmem-2.1.post4.exe (latest and greatest) which is requried on UNC path or LocalOut path.
 
 .PARAMETER Disk
     Optional parameter Forensic Copy Mode to select collection of $MFT, UsnJournal:$J and $LogFile.
@@ -166,7 +179,7 @@
     Currently either open share or hardcoded auth for netuse command in scriptblock.
     Do not turn CredSSP on for IR use cases! Best practice would be to create a local account with access to the share and utilise those credentials in script.
     Powershell 5.0+ allows for "Copy-Item -FromSession" over PSSession to reduce the need for "Net use".
-    Winpmem-2.1.post4.exe can be downloaded from https://github.com/google/rekall/releases/tag/v1.5.1 and needs to be placed in UNC path specified in ForensicCOpy mode.
+    Winpmem-2.1.post4.exe can be downloaded from https://github.com/google/rekall/releases/tag/v1.5.1 and needs to be placed in UNC path or LocalOut path specified in ForensicCopy mode.
 
     Thank you to:
         @jaredcatkinson PowerForensics - https://github.com/Invoke-IR/PowerForensics
@@ -182,6 +195,8 @@
         [Parameter(Mandatory = $False)][Switch]$useSSL,
         [Parameter(Mandatory = $False)][String]$Map,
         [Parameter(Mandatory = $False)][String]$UNC,
+        [Parameter(Mandatory = $False)][String]$LocalOut,
+        [Parameter(Mandatory = $False)][Switch]$WriteScriptBlock,
         [Parameter(Mandatory = $False)][String]$Raw,
         [Parameter(Mandatory = $False)][String]$Copy,
         [Parameter(Mandatory = $False)][Switch]$All,
@@ -233,10 +248,15 @@
     # Input validation
     If ($Raw -Or $Copy -Or $Mft -Or $Usnj -Or $Pf -Or $Reg -Or $Evtx -Or $User -Or $Disk -Or $Mem -Or $All){
         $ForensicCopy = $True
-        If (!$Map){$Map = $True}
-        If (!$UNC){$UNC = $True}
-        $Map = Invoke-InputValidation -Map $Map
-        $UNC = Invoke-InputValidation -UNC $UNC
+		If (!$LocalOut) {
+			If (!$Map){$Map = $True}
+			If (!$UNC){$UNC = $True}
+			$Map = Invoke-InputValidation -Map $Map
+			$UNC = Invoke-InputValidation -UNC $UNC
+		}
+		Else {
+			$Map = $LocalOut
+		}
     }
 
     If ($LR){
@@ -287,18 +307,20 @@
         }
     }
 
-    #Ugly, to look into optimisation in future
-    $sbPath =  [ScriptBlock]::Create("`ncmd /c net use $Map $UNC > null 2>&1`nIf(!(Test-Path $Map)){`"Error: Check UNC path and credentials. Unable to Map $Map``n`";break}`n" + $Output + "`n" + $sbPath.ToString())
-    
-    $Scriptblock = [ScriptBlock]::Create($sbPriority.ToString() + $sbPath.ToString())
+    if (!$LocalOut) {
+		#Ugly, to look into optimisation in future
+		$sbPath =  [ScriptBlock]::Create("`ncmd /c net use $Map $UNC > null 2>&1`nIf(!(Test-Path $Map)){`"Error: Check UNC path and credentials. Unable to Map $Map``n`";break}`n" + $sbPath.ToString())
+    }
+        
+    $Scriptblock = [ScriptBlock]::Create($sbPriority.ToString() + "`t" + $Output + "`n" + $sbPath.ToString())
 
     # MemoryDump
     If ($Mem -Or $All){
         $sbMemory = {
-            $MemDumpTool = (get-item $Output).parent.fullname + "winpmem-2.1.post4.exe"
+            $MemDumpTool = (get-item $Output).parent.fullname + "\winpmem-2.1.post4.exe"
             If (Test-Path $MemDumpTool){
                 try{
-                    If(Test-Path $Output\memory.zip){Remove-Item "$Output\memory.zip" -Recurse -Force -ErrorAction SilentlyContinue | Out-Nul}
+                    If(Test-Path $Output\memory.zip){Remove-Item "$Output\memory.zip" -Recurse -Force -ErrorAction SilentlyContinue | Out-Null}
                     Write-Host -ForegroundColor Yellow "`tCollecting Memory"
                     cmd /c "$MemDumpTool --format raw -o $Output\memory.zip > null 2>&1"
                 }
@@ -638,131 +660,134 @@
     }
 
     # Unmap share
-    $sbUnMap = [ScriptBlock]::Create("`tnet use " + $Map + " /DELETE /Y | Out-Null")
-    
-    $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbViewCollection.ToString() + $sbUnMap.ToString()) 
+    if (!$LocalOut) {
+		$sbUnMap = [ScriptBlock]::Create("`tnet use " + $Map + " /DELETE /Y | Out-Null")	
+		$Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbUnMap.ToString())
+	}
 
-
-
-    #### Main ####
-    Write-Host -ForegroundColor Cyan "`nInvoke-LiveResponse"
-    
-    # Firstly test We can connect
-    $Test=$null
-
-    Write-Host "`n`tTesting WinRM is enabled on $ComputerName " -NoNewline
-    If(!$useSSL){
-        $Test = [bool](Test-WSMan -ComputerName $ComputerName -Port $Port -ErrorAction SilentlyContinue)
-    }
-    ElseIf($useSSL){
-        $Test = [bool](Test-WSMan -ComputerName $ComputerName -Port $Port -UseSSL -ErrorAction SilentlyContinue)
-    }
-
-    # If test OK continue. Using Test as Results in better error handling.
-    If ($Test -eq "True"){
-        Write-Host -ForegroundColor DarkCyan "SUCCESS`n"
-    }
-    Else{
-        Write-Host -ForegroundColor Red "FAILED`n"
-        Write-Host "Can not connect to $ComputerName over WinRM... check Target exists and WinRM enabled`n"
-        break
-    }
+	if ($WriteScriptBlock) {
+		$Scriptblock | Out-String -Width 4096 | Out-File "$(Get-Location)\$($date)_$($ComputerName)_ForensicCopy_script.ps1"
+	}
+	else {
+        #### Main ####
+        Write-Host -ForegroundColor Cyan "`nInvoke-LiveResponse"
         
-    Try{
-        Write-Host "`tStarting PSSession on $ComputerName " -NoNewline
+        # Firstly test We can connect
+        $Test=$null
+
+        Write-Host "`n`tTesting WinRM is enabled on $ComputerName " -NoNewline
         If(!$useSSL){
-            $Session = New-PSSession -ComputerName $ComputerName -Port $Port -Credential $Credential -Authentication $Authentication -SessionOption (New-PSSessionOption -NoMachineProfile) -ErrorAction Stop
+            $Test = [bool](Test-WSMan -ComputerName $ComputerName -Port $Port -ErrorAction SilentlyContinue)
         }
         ElseIf($useSSL){
-            $Session = New-PSSession -ComputerName $ComputerName -UseSSL -Port $Port -Credential $Credential -Authentication $Authentication -SessionOption (New-PSSessionOption -NoMachineProfile)  -ErrorAction Stop
+            $Test = [bool](Test-WSMan -ComputerName $ComputerName -Port $Port -UseSSL -ErrorAction SilentlyContinue)
         }
-        Write-Host -ForegroundColor DarkCyan "SUCCESS`n"
-        Write-Host -ForegroundColor Cyan "PSSession with $ComputerName as $Credential"
 
-        #Pulling Target name for LR and notification
-        $Target = Invoke-Command -Session $Session -Scriptblock {$env:computername}
-    }
-    Catch{
-        Write-Host -ForegroundColor Red "FAILED`n"
-        Write-Host "$_`n"
-        Break
-    }
-
-    If($ForensicCopy){
-        Write-Host -ForegroundColor Cyan "`nStarting ForensicCopy over WinRM..."
-        Write-Host "`tUNC Path: " $UNC.split()[0]
-        Write-Host "`tAs $Map\$date`Z_$Target`n"
-        Write-Host $ForensicCopyText
-
-        # Execute collated scriptblock
-        Invoke-Command -Session $Session -Verbose -Scriptblock $Scriptblock
-
-        Write-Host -ForegroundColor Cyan "ForensicCopy over WinRM complete`n"
-    }
-    
-    If($LR){
-        Write-Host -ForegroundColor Cyan "`nStarting LiveResponse over WinRM..."
-        Write-Host "`tFrom Content `n`t$Content"
-        Write-Host "`tNote: Error handling during LiveResponse mode is required to be handled in content.`n"
-        $Results = $Results + $Target + "_LR"
-        Write-Host "`tTo Results `n`t$Results`n"
-
-        $Scripts = Get-ChildItem -Path "$Content\*.ps1"
-
-        If (Test-Path $Results) {Remove-Item $Results -Recurse -Force -ErrorAction SilentlyContinue | Out-Null}
-        New-Item $Results -type directory -ErrorAction SilentlyContinue | Out-Null
-
-        Foreach ($Script in $Scripts){
-            Write-Host -ForegroundColor Yellow "`tRunning " $Script.Name
+        # If test OK continue. Using Test as Results in better error handling.
+        If ($Test -eq "True"){
+            Write-Host -ForegroundColor DarkCyan "SUCCESS`n"
+        }
+        Else{
+            Write-Host -ForegroundColor Red "FAILED`n"
+            Write-Host "Can not connect to $ComputerName over WinRM... check Target exists and WinRM enabled`n"
+            break
+        }
             
-            Invoke-Command -Session $Session -Scriptblock {[gc]::collect()}
-
-
-            $ScriptResults = Invoke-Command -Session $Session -FilePath $Script.FullName #| Select-Object -Property * -ExcludeProperty PSComputerName,RunspaceID
-            # depending on Content we can strip properties from Format-List results with | Select-Object above
-
-            If (!$csv){
-                $ScriptResults | Out-File ($Results + "\" + $Script.BaseName + ".txt")
+        Try{
+            Write-Host "`tStarting PSSession on $ComputerName " -NoNewline
+            If(!$useSSL){
+                $Session = New-PSSession -ComputerName $ComputerName -Port $Port -Credential $Credential -Authentication $Authentication -SessionOption (New-PSSessionOption -NoMachineProfile) -ErrorAction Stop
             }
-            ElseIf ($csv){
-                $delim = ","
-                $ScriptResults | convertto-csv -NoTypeInformation | % { $_ -replace "`"$delim`"", "$delim"} | % { $_ -replace "^`"",""} | % { $_ -replace "`"$",""} | % { $_ -replace "`"$delim","$delim"}
-                $ScriptResults | Out-File ($Results + "\" + $Script.BaseName + ".csv") -Encoding ascii
+            ElseIf($useSSL){
+                $Session = New-PSSession -ComputerName $ComputerName -UseSSL -Port $Port -Credential $Credential -Authentication $Authentication -SessionOption (New-PSSessionOption -NoMachineProfile)  -ErrorAction Stop
             }
+            Write-Host -ForegroundColor DarkCyan "SUCCESS`n"
+            Write-Host -ForegroundColor Cyan "PSSession with $ComputerName as $Credential"
+
+            #Pulling Target name for LR and notification
+            $Target = Invoke-Command -Session $Session -Scriptblock {$env:computername}
+        }
+        Catch{
+            Write-Host -ForegroundColor Red "FAILED`n"
+            Write-Host "$_`n"
+            Break
         }
 
-        # Remove null results for simple analysis
-        Foreach ($Item in (Get-ChildItem -Path $Results)){
-            If ($Item.length -eq 0){Remove-Item -Path $Item.FullName -Force}
+        If($ForensicCopy){
+            Write-Host -ForegroundColor Cyan "`nStarting ForensicCopy over WinRM..."
+            Write-Host "`tUNC Path: " $UNC.split()[0]
+            Write-Host "`tAs $Map\$date`Z_$Target`n"
+            Write-Host $ForensicCopyText
+
+            # Execute collated scriptblock
+            Invoke-Command -Session $Session -Verbose -Scriptblock $Scriptblock
+
+            Write-Host -ForegroundColor Cyan "ForensicCopy over WinRM complete`n"
         }
         
-        If (Get-ChildItem -Path $Results -Recurse){
-            Write-Host -ForegroundColor Yellow "`nListing valid results in LiveResponse collection:"
-            Get-ChildItem -Path $Results -Recurse | select-object LastWriteTimeUtc, Length, Name | Format-Table -AutoSize
+        If($LR){
+            Write-Host -ForegroundColor Cyan "`nStarting LiveResponse over WinRM..."
+            Write-Host "`tFrom Content `n`t$Content"
+            Write-Host "`tNote: Error handling during LiveResponse mode is required to be handled in content.`n"
+            $Results = $Results + $Target + "_LR"
+            Write-Host "`tTo Results `n`t$Results`n"
+
+            $Scripts = Get-ChildItem -Path "$Content\*.ps1"
+
+            If (Test-Path $Results) {Remove-Item $Results -Recurse -Force -ErrorAction SilentlyContinue | Out-Null}
+            New-Item $Results -type directory -ErrorAction SilentlyContinue | Out-Null
+
+            Foreach ($Script in $Scripts){
+                Write-Host -ForegroundColor Yellow "`tRunning " $Script.Name
+                
+                Invoke-Command -Session $Session -Scriptblock {[gc]::collect()}
+
+
+                $ScriptResults = Invoke-Command -Session $Session -FilePath $Script.FullName #| Select-Object -Property * -ExcludeProperty PSComputerName,RunspaceID
+                # depending on Content we can strip properties from Format-List results with | Select-Object above
+
+                If (!$csv){
+                    $ScriptResults | Out-File ($Results + "\" + $Script.BaseName + ".txt")
+                }
+                ElseIf ($csv){
+                    $delim = ","
+                    $ScriptResults | convertto-csv -NoTypeInformation | % { $_ -replace "`"$delim`"", "$delim"} | % { $_ -replace "^`"",""} | % { $_ -replace "`"$",""} | % { $_ -replace "`"$delim","$delim"}
+                    $ScriptResults | Out-File ($Results + "\" + $Script.BaseName + ".csv") -Encoding ascii
+                }
+            }
+
+            # Remove null results for simple analysis
+            Foreach ($Item in (Get-ChildItem -Path $Results)){
+                If ($Item.length -eq 0){Remove-Item -Path $Item.FullName -Force}
+            }
+            
+            If (Get-ChildItem -Path $Results -Recurse){
+                Write-Host -ForegroundColor Yellow "`nListing valid results in LiveResponse collection:"
+                Get-ChildItem -Path $Results -Recurse | select-object LastWriteTimeUtc, Length, Name | Format-Table -AutoSize
+            }
+            Else {
+                Write-Host -ForegroundColor Yellow "`nNo valid LiveResponse results"
+            }
+
+            Write-Host -ForegroundColor Cyan "`nLiveResponse over WinRM complete`n"
         }
-        Else {
-            Write-Host -ForegroundColor Yellow "`nNo valid LiveResponse results"
+                            
+        If($Shell){
+            Write-Host -NoNewline "`nTo access PSSession shell on $ComputerName, please run "
+            Write-Host -NoNewline -ForegroundColor Yellow "Get-PSSession "
+            Write-Host "To view availible Session Ids"
+            Write-Host -NoNewline "Run "
+            Write-Host -NoNewline -ForegroundColor Yellow "Enter-PSSession -id <id> "
+            Write-Host "to enter shell."
+            Write-Host -NoNewline "Remember to "
+            Write-Host -NoNewline -ForegroundColor Yellow "Remove-PSSession -id <id> "
+            Write-Host  "when complete!`n"
+            Write-Host -ForegroundColor Cyan "Leaving Invoke-LiveResponse`n"
+            break
         }
 
-        Write-Host -ForegroundColor Cyan "`nLiveResponse over WinRM complete`n"
+        Remove-PSSession -Session $Session
     }
-                        
-    If($Shell){
-        Write-Host -NoNewline "`nTo access PSSession shell on $ComputerName, please run "
-        Write-Host -NoNewline -ForegroundColor Yellow "Get-PSSession "
-        Write-Host "To view availible Session Ids"
-        Write-Host -NoNewline "Run "
-        Write-Host -NoNewline -ForegroundColor Yellow "Enter-PSSession -id <id> "
-        Write-Host "to enter shell."
-        Write-Host -NoNewline "Remember to "
-        Write-Host -NoNewline -ForegroundColor Yellow "Remove-PSSession -id <id> "
-        Write-Host  "when complete!`n"
-        Write-Host -ForegroundColor Cyan "Leaving Invoke-LiveResponse`n"
-        break
-    }
-
-    Remove-PSSession -Session $Session
-
 }
 
 
