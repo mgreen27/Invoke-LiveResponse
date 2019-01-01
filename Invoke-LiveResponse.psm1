@@ -5,7 +5,7 @@
     A Module for Live Response and Forensic collections over WinRM. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.51
+    Version: 0.60
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
