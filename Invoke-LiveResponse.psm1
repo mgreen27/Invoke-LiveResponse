@@ -5,7 +5,7 @@
     A Module for Live Response and Forensic collections over WinRM. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.60
+    Version: 0.61
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
@@ -622,7 +622,7 @@
                 $RecbinFiles += Get-ChildItem -Path "$Drive\`$Recycle.Bin\" -recurse -force -ErrorAction SilentlyContinue -Exclude desktop.ini | where { ! $_.PSIsContainer } | Select-Object -Property FullName
             }
             foreach ( $Rfile in $RecbinFiles ) {
-                # workaround for occasional null value in $Recbinfiles on on PowerShell 2.0
+                # workaround for occasional null value in $Recbinfiles on PowerShell 2.0
                 if ( ( $Rfile ) -and ( Get-Member -inputobject $Rfile -name "FullName" -Membertype Properties ) ) {
                     $Rfile = $Rfile.FullName
                 } else {
