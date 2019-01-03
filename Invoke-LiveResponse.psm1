@@ -619,22 +619,26 @@
 
             $RecbinFiles = @()
             foreach ( $Drive in $Drives ) {
-                $RecbinFiles += Get-ChildItem -Path "$Drive\`$Recycle.Bin\" -recurse -force -ErrorAction SilentlyContinue -File -Exclude desktop.ini | Select-Object -Property FullName
+                $RecbinFiles += Get-ChildItem -Path "$Drive\`$Recycle.Bin\" -recurse -force -ErrorAction SilentlyContinue -Exclude desktop.ini | where { ! $_.PSIsContainer } | Select-Object -Property FullName
             }
-
             foreach ( $Rfile in $RecbinFiles ) {
-                $Rfile = $Rfile.FullName
-                
+                # workaround for occasional null value in $Recbinfiles on on PowerShell 2.0
+                if ( ( $Rfile ) -and ( Get-Member -inputobject $Rfile -name "FullName" -Membertype Properties ) ) {
+                    $Rfile = $Rfile.FullName
+                } else {
+                    break
+                }
+                                    
                 # match source folders
                 $Rfolder = Split-Path -Path $Rfile -Parent | Split-Path -NoQualifier
-	
+    
                 If (! (Test-Path ($Output + "\recbin\" + $Rfolder)) ) {
                     New-Item ($Output + "\recbin\" + $Rfolder) -type directory | Out-Null
                 }
 
                 $TempFilename = Split-Path -Leaf $Rfile
-				New-Item -ItemType File -Path ($Output + "\recbin\" + $Rfolder + "\" + $TempFilename) -Force | Out-Null
-				Try{Copy-Item -Path $Rfile -Destination ($Output + "\recbin\" + $Rfolder + "\" + $TempFilename) | Out-Null}
+                New-Item -ItemType File -Path ($Output + "\recbin\" + $Rfolder + "\" + $TempFilename) -Force | Out-Null
+                Try{Copy-Item -Path $Rfile -Destination ($Output + "\recbin\" + $Rfolder + "\" + $TempFilename) | Out-Null}
                 Catch{Write-Host "`tError: Powershell $Rfile copy failed."}
             }
         }
