@@ -255,7 +255,7 @@
 			$UNC = Invoke-InputValidation -UNC $UNC
 		}
 		Else {
-			$Map = $LocalOut
+			$Map = $LocalOut.TrimEnd('\')
 		}
     }
 
@@ -307,7 +307,7 @@
         }
     }
 
-    if (!$LocalOut) {
+    if (!$LocalOut){
 		#Ugly, to look into optimisation in future
 		$sbPath =  [ScriptBlock]::Create("`ncmd /c net use $Map $UNC > null 2>&1`nIf(!(Test-Path $Map)){`"Error: Check UNC path and credentials. Unable to Map $Map``n`";break}`n" + $sbPath.ToString())
     }
@@ -317,7 +317,7 @@
     # MemoryDump
     If ($Mem -Or $All){
         $sbMemory = {
-            $MemDumpTool = (get-item $Output).parent.fullname + "\winpmem-2.1.post4.exe"
+            $MemDumpTool = (get-item $Output).parent.fullname + "winpmem-2.1.post4.exe"
             If (Test-Path $MemDumpTool){
                 try{
                     If(Test-Path $Output\memory.zip){Remove-Item "$Output\memory.zip" -Recurse -Force -ErrorAction SilentlyContinue | Out-Null}
@@ -439,16 +439,89 @@
         }
 
 
+    # Add Invoke-BulkCopy for bulk copy usecases
+    If ($ForensicCopy){
+        $sbBulkCopy = {
+             function Invoke-BulkCopy{
+                [CmdletBinding()]
+                Param(
+                    [Parameter( Mandatory = $True)][String]$folder,
+                    [Parameter( Mandatory = $True)][String]$target,
+                    [Parameter( Mandatory = $False)][String]$filter,
+                    [Parameter( Mandatory = $False)][String]$exclude,
+                    [Parameter( Mandatory = $False)][Switch]$recurse,
+                    [Parameter( Mandatory = $False)][Switch]$forensic
+                )
+
+                if(test-path $folder){
+                    if ($recurse) {
+                        if ($filter) {
+                            if ($exclude) {$items = get-childitem $folder -Recurse -Filter $filter -Force}
+                            else {$items = get-childitem $folder -Recurse -Filter $filter -Force}
+                        }
+                        else{
+                            if ($exclude) {$items = get-childitem $folder -Recurse -exclude $exclude -Force}
+                            else {$items = get-childitem $folder -Recurse -Force}
+                        }
+                    }
+                    else {
+                        if ($filter) {
+                            if ($exclude) {$items = get-childitem $folder -Filter $filter -exclude $exclude -Force}
+                            else {$items = get-childitem $folder -Filter $filter -Force}
+                        }
+                        else{
+                            if ($exclude) {$items = get-childitem $folder -exclude $exclude -Force}
+                            else {$items = get-childitem $folder -exclude $exclude -Force}
+                        }
+                    }
+    
+                    $CopyTargets = @{} # build hashtable of targets
+
+                    $items | ForEach-Object { 
+                        $out = $_.FullName -replace [regex]::escape($folder), $target
+
+                        if ($_.PSIsContainer) {
+                            $CopyTargets[$CopyTargets.count] = @($_.FullName,$out,"FOLDER")
+                        }
+                        else {$CopyTargets[$CopyTargets.count] = @($_.FullName,$out,"FILE")}
+                    }
+
+                    foreach ($item in $CopyTargets.getEnumerator() | Sort Key){
+                        if ($item.value[2] -eq "FOLDER" -And $item.value[1]) {
+                            New-Item -Path $item.value[1] -ItemType directory -Force | out-null
+                        }
+                        Elseif ($item.value[2] -eq "FILE" -And $item.value[1]){
+                            If (!(Test-Path (Split-Path -Path $item.value[1]))){
+                                New-Item (Split-Path -Path $item.value[1]) -type directory -Force | Out-Null
+                            }
+            
+                            if ($forensic){        
+                                try {Invoke-ForensicCopy -InFile $item.value[0] -OutFile $item.value[1]}
+                                Catch {Write-Host "`tError:"$item.value[0]"raw copy."}
+                            }
+                            Else {
+                                try {Copy-Item -Path $item.value[0] -Destination $item.value[1] -Force}
+                                Catch {Write-Host "`tError:"$item.value[0]"copy."}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbBulkCopy.ToString())
+    }
+
+
     # $MFT collection
     If ($Mft -Or $Disk -Or $All){
         $sbMft = {
-            If (! (Test-Path $Output\disk)){
-                New-Item ($Output + "\disk") -type directory | Out-Null
+            If (! (Test-Path "$Output\Disk")){
+                New-Item ($Output + "\Disk") -type directory | Out-Null
             }
 
             Write-Host -ForegroundColor Yellow "`tCollecting `$MFT"
-            try{Invoke-ForensicCopy -InFile "$env:systemdrive\`$MFT" -OutFile ($Output + "\disk\`$MFT")}
-            Catch{Write-Host "`tError: Powerforensics raw `$MFT copy."}            
+            try{Invoke-ForensicCopy -InFile "$env:systemdrive\`$MFT" -OutFile ($Output + "\Disk\`$MFT")}
+            Catch{Write-Host "`tError: `$MFT raw copy."}            
         }
         
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbMft.ToString())
@@ -459,13 +532,13 @@
     # $LogFile collection
     If ($Disk -Or $All ){
         $sbLogFile = {
-            If (! (Test-Path $Output\disk)){
-                New-Item ($Output + "\disk") -type directory | Out-Null
+            If (! (Test-Path "$Output\disk")){
+                New-Item ($Output + "\Disk") -type directory | Out-Null
             }
 
             Write-Host -ForegroundColor Yellow "`tCollecting `$LogFile"
-            try{Invoke-ForensicCopy -InFile "$env:systemdrive\`$LogFile" -OutFile ($Output + "\disk\`$LogFile")}
-            Catch{Write-Host "`tError: Powerforensics raw `$LogFile copy."}            
+            try{Invoke-ForensicCopy -InFile "$env:systemdrive\`$LogFile" -OutFile ($Output + "\Disk\`$LogFile")}
+            Catch{Write-Host "`tError: `$LogFile raw copy."}            
         }
         
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbLogFile.ToString())
@@ -476,12 +549,12 @@
     # Dump of USNJrnl
     If ($Usnj -Or $Disk -Or $All){
         $sbUsnj = {
-            If (! (Test-Path $Output\disk)){
-                New-Item ($Output + "\disk") -type directory | Out-Null
+            If (! (Test-Path "$Output\disk")){
+                New-Item ($Output + "\Disk") -type directory | Out-Null
             }
             Write-Host -ForegroundColor Yellow "`tCollecting UsnJournal:`$J"
-            try{Invoke-ForensicCopy -InFile "$env:systemdrive\`$Extend\`$UsnJrnl" -OutFile ($Output + "\disk\`$J") -DataStream "`$J"}
-            Catch{Write-Host "`tError: Powerforensics raw UsnJournal:`$J copy."}
+            try{Invoke-ForensicCopy -InFile "$env:systemdrive\`$Extend\`$UsnJrnl" -OutFile ($Output + "\Disk\`$J") -DataStream "`$J"}
+            Catch{Write-Host "`tError: UsnJournal:`$J raw copy."}
         }
 
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbUsnj.ToString())
@@ -492,16 +565,8 @@
     # Prefetch Copy-item
     If ($Pf -Or $All){
         $sbPf = {
-            If (Get-ChildItem -Path $env:systemdrive\Windows\Prefetch\*.pf -ErrorAction SilentlyContinue){
-                If (! (Test-Path $Output\prefetch)){
-                    New-Item ($Output + "\prefetch") -type directory | Out-Null
-                }
-                Write-Host -ForegroundColor Yellow "`tCollecting Prefecth"
-                Copy-Item -Path $env:systemdrive\Windows\Prefetch\*.pf -Destination ($Output + "\prefetch\") -ErrorAction SilentlyContinue
-            }
-            Else{
-                Write-Host -ForegroundColor Yellow "`tNo pf files found"
-            }
+            Write-Host -ForegroundColor Yellow "`tCollecting Prefetch (if exist)"
+            Invoke-BulkCopy -folder "$env:systemdrive\Windows\Prefetch" -target "$Output\Prefetch" -filter *.pf
         }
 
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPf.ToString())
@@ -512,27 +577,20 @@
     # Registry Hive collection
     If ($Reg -Or $All){
         $sbReg = {
-            If (! (Test-Path $Output\registry)){
-                New-Item ($Output + "\registry") -type directory | Out-Null
-                Write-Host -ForegroundColor Yellow "`tCollecting Registry Hives"
-            }
+            Write-Host -ForegroundColor Yellow "`tCollecting Registry Hives"
 
-            try{Invoke-ForensicCopy -InFile "$env:systemdrive\Windows\System32\config\SECURITY" -OutFile ($Output + "\registry\SECURITY")}
-            Catch{Write-Host "`tError: Powerforensics SECURITY hive raw copy."}
+            # Collecting relevant registry items
+            # TODO: decide how to implement -filter "<HIVE>*" which will also pull transaction logs but my be messy for current triage usecases
+            Invoke-BulkCopy -folder "$env:systemdrive\Windows\System32\config" -target "$Output\Registry" -filter "SECURITY" -forensic
+            Invoke-BulkCopy -folder "$env:systemdrive\Windows\System32\config" -target "$Output\Registry" -filter "SOFTWARE" -forensic
+            Invoke-BulkCopy -folder "$env:systemdrive\Windows\System32\config" -target "$Output\Registry" -filter "SAM" -forensic
+            Invoke-BulkCopy -folder "$env:systemdrive\Windows\System32\config" -target "$Output\Registry" -filter "SYSTEM" -forensic
 
-            try{Invoke-ForensicCopy -InFile "$env:systemdrive\Windows\System32\config\SOFTWARE" -OutFile ($Output + "\registry\SOFTWARE")}
-            Catch{Write-Host "`tError: Powerforensics SOFTWARE hive raw copy."}
+            Invoke-BulkCopy -folder "$env:systemdrive\Windows\AppCompat\Programs" -target "$Output\Registry\Windows\AppCompat\Programs" -filter "Amcache.hve" -forensic
 
-            try{Invoke-ForensicCopy -InFile "$env:systemdrive\Windows\System32\config\SAM" -OutFile ($Output + "\registry\SAM")}
-            Catch{Write-Host "`tError: Powerforensics SAM hive raw copy."}
-
-            try{Invoke-ForensicCopy -InFile "$env:systemdrive\Windows\System32\config\SYSTEM" -OutFile ($Output + "\registry\SYSTEM")}
-            Catch{Write-Host "`tError: Powerforensics SYSTEM hive raw copy."}
-
-            If (Test-Path $env:systemdrive\Windows\AppCompat\Programs\Amcache.hve){
-                try{Invoke-ForensicCopy -InFile "$env:systemdrive\Windows\AppCompat\Programs\Amcache.hve" -OutFile ($Output + "\registry\Amcache.hve")}
-                Catch{Write-Host "`tError: Powerforensics Amcache.hve raw copy."}
-            }
+            # System and serice profile hives
+            Invoke-BulkCopy -folder "$env:systemdrive\Windows\system32\config\systemprofile" -target "$Output\Registry\SystemProfile" -filter "ntuser.dat" -forensic
+            Invoke-BulkCopy -folder "$env:systemdrive\Windows\ServiceProfiles" -target "$Output\Registry\ServiceProfiles" -filter "ntuser.dat" -recurse -forensic
         }
 
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbReg.ToString())
@@ -543,27 +601,8 @@
     # Event Log collection    
     If ($Evtx -Or $All){
         $sbEvtx = {
-            If (! (Test-Path $Output\evtx)) {New-Item ($Output + "\evtx") -type directory | Out-Null}
             Write-Host -ForegroundColor Yellow "`tCollecting Windows Event Logs"
-            
-            try{Invoke-ForensicCopy -InFile "$env:systemdrive\Windows\System32\winevt\Logs\Security.evtx" -OutFile ($Output + "\evtx\Security.evtx")}
-            Catch{Write-Host "`tError: Powerforensics Security.evtx raw copy."}
-
-            try{Invoke-ForensicCopy -InFile "$env:systemdrive\Windows\System32\winevt\Logs\System.evtx" -OutFile ($Output + "\evtx\System.evtx")}
-            Catch{Write-Host "`tError: Powerforensics System.evtx raw copy."}
-
-            try{Invoke-ForensicCopy -InFile "$env:systemdrive\Windows\System32\winevt\Logs\Application.evtx" -OutFile ($Output + "\evtx\Application.evtx")}
-            Catch{Write-Host "`tError: Powerforensics Application.evtx raw copy."}
-
-            If (Test-Path $env:systemdrive\Windows\System32\winevt\Logs\Microsoft-Windows-Sysmon%4Operational.evtx){
-                try{Invoke-ForensicCopy -InFile "$env:systemdrive\Windows\System32\winevt\Logs\Microsoft-Windows-Sysmon%4Operational.evtx" -OutFile ($Output + "\evtx\Sysmon.evtx")}
-                Catch{Write-Host "`tError: Powerforensics Sysmon.evtx raw copy."}
-            }
-
-            If (Test-Path $env:systemdrive\Windows\System32\winevt\Logs\Microsoft-Windows-Powershell%4Operational.evtx){
-                try{Invoke-ForensicCopy -InFile "$env:systemdrive\Windows\System32\winevt\Logs\Microsoft-Windows-Powershell%4Operational.evtx" -OutFile ($Output + "\evtx\Powershell.evtx")}
-                Catch{Write-Host "`tError: Powerforensics Powershell.evtx raw copy."}
-            }
+            Invoke-BulkCopy -folder "$env:systemdrive\Windows\System32\winevt\Logs" -target "$Output\Evtx" -filter "*.evtx" -forensic
         }
                  
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbEvtx.ToString())
@@ -574,28 +613,17 @@
     # User artefact collection, currently user hives only
     If ($User -Or $All){
         $sbUser = {
-            If (! (Test-Path $Output\user)){
-                New-Item ($Output + "\user") -type directory | Out-Null
-                
-                $Users = (Get-ChildItem "$env:systemdrive\Users\")
-                $Users = $Users | Where-Object { $_.Name -ne "Public" }
-                If ($Users){Write-Host -ForegroundColor Yellow "`tCollecting User Artefacts"}
-            }
-            
+            Write-Host -ForegroundColor Yellow "`tCollecting User Artefacts"
+                       
+            $Users = Get-ChildItem "$env:systemdrive\Users\" -Force | where-object {$_.PSIsContainer} | Where-object {
+                $_.Name -ne "Public" -And $_.Name -ne "All Users" -And $_.Name -ne "DEfault" -And $_.Name -ne "Default User"} | select-object -ExpandProperty name
+
             Foreach ($User in $Users) {
-                New-Item ($Output + "\User\" + $User) -type directory | Out-Null
-
-                If (Test-Path $env:systemdrive\Users\$User\ntuser.dat){
-                    try{Invoke-ForensicCopy -InFile "$env:systemdrive\Users\$User\ntuser.dat" -OutFile ($Output + "\user\" + $User + "\ntuser.dat")}
-                    Catch{Write-Host "`tError: Powerforensics ntuser.dat raw copy."}
-                }
-
-                If (Test-Path $env:systemdrive\Users\$User\AppData\Local\Microsoft\Windows\UsrClass.dat){
-                    try{Invoke-ForensicCopy -InFile "$env:systemdrive\Users\$User\AppData\Local\Microsoft\Windows\UsrClass.dat" -OutFile ($Output + "\user\" + $User + "\UsrClass.dat")}
-                    Catch{Write-Host "`tError: Powerforensics UserClass.dat raw copy."}
-                }
+                Invoke-BulkCopy -folder "$env:systemdrive\Users\$User" -target "$Output\User\$user" -filter "ntuser.dat" -forensic
+                Invoke-BulkCopy -folder "$env:systemdrive\Users\$User\AppData\Local\Microsoft\Windows" -target "$Output\User\$user\AppData\Local\Microsoft\Windows" -filter "UserClass.dat" -forensic
             }
         }
+
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbUser.ToString())
         $ForensicCopyText = $ForensicCopyText + "`t`tUser Artefacts`n"
     }
@@ -614,7 +642,7 @@
                 + "`t`tIf (! (Test-Path `"`$Output`\files`$FileFolder`")) {New-Item (`"`$Output`\files`$FileFolder`") -type directory | Out-Null}`n"`
                 + "`t`tWrite-Host -ForegroundColor Yellow `"`tCopy-Item $Item`"`n"`
                 + "`t`ttry{[gc]::collect();Copy-Item -Path `$File -Destination `"`$Output\files`$(Split-Path -Path `$File -NoQualifier)`"}`n"`
-                + "`t`tCatch{Write-Host `"`tError: Copy-Item `$File copy. Likely Locked File. Try Powerforensics Raw copy switch.`"}"`
+                + "`t`tCatch{Write-Host `"`tError: Copy-Item `$File copy. Likely Locked File. Try Raw copy switch.`"}"`
                 + "`t`t`$File = `$Null`n"`
                 + "`t`t`$FileFolder = `$Null`n"`
                 + "`t`t[gc]::collect()`n"`
@@ -640,7 +668,7 @@
                 + "`t`tIf (! (Test-Path `"`$Output`\files`$FileFolder`")) {New-Item (`"`$Output`\files`$FileFolder`") -type directory | Out-Null}`n"`
                 + "`t`tWrite-Host -ForegroundColor Yellow `"`tRawCopy $Item`"`n"`
                 + "try{Invoke-ForensicCopy -InFile `$File -OutFile (`$Output + `"\files`" + (Split-Path -Path `$File -NoQualifier))}"`
-                + "Catch{Write-Host `"`tError: Powerforensics `$File raw copy.`"}"`
+                + "Catch{Write-Host `"`tError: `$File raw copy.`"}"`
                 + "`t`t`$File = `$Null`n"`
                 + "`t`t`$FileFolder = `$Null`n"`
                 + "`t`t[gc]::collect()`n"`
@@ -665,11 +693,12 @@
 		$Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbUnMap.ToString())
 	}
 
+    #### Main ####
 	if ($WriteScriptBlock) {
 		$Scriptblock | Out-String -Width 4096 | Out-File "$(Get-Location)\$($date)_$($ComputerName)_ForensicCopy_script.ps1"
 	}
-	else {
-        #### Main ####
+    else {
+        
         Write-Host -ForegroundColor Cyan "`nInvoke-LiveResponse"
         
         # Firstly test We can connect
@@ -840,9 +869,9 @@ function Invoke-InputValidation
             Write-Host "e.g C:\scripts\dfir"
             $Content = Read-Host -Prompt "Enter content folder" 
         }
-        $Content = $Content.trim()
-        $Content = $Content.trim("\")
-        $Content = $Content.trim()
+        $Content = $Content.Trim()
+        $Content = $Content.TrimEnd("\")
+        $Content = $Content.Trim()
         Clear-Host
         return $Content
     }
@@ -856,9 +885,9 @@ function Invoke-InputValidation
             Write-Host "e.g C:\cases"
             $Results = Read-Host -Prompt "Enter results folder"
         }
-        $Results = $Results.trim()
-        $Results = $Results.trim("\")
-        $Results = $Results.trim()
+        $Results = $Results.Trim()
+        $Results = $Results.TrimEnd("\")
+        $Results = $Results.Trim()
         Clear-Host
         return $Results
     }
