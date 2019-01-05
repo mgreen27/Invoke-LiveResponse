@@ -5,7 +5,7 @@
     A Module for Live Response and Forensic collections over WinRM. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.60
+    Version: 0.80
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
@@ -59,7 +59,11 @@
             Quotes required for long command. Input is validated.
 
 .PARAMETER LocalOut
-	Specifies a local folder on the remote system as a destination for Forensic Collection results.
+    Two use cases:
+    1) Used in combination with -WriteScriptBlock to build a local Invoke-LiveResponse script.
+    e.g -LocalOut:True -WriteSciptBlock will write a ps1 file to run from LiveResponse USB / System management tool.
+
+	2) Specifies a local folder on the remote system as a destination for Forensic Collection results.
     Use in place of -Map and -UNC flags.
     Note: Do not use lightly! Writing this data to a local drive *will* overwrite some slack space. 
     Should be used only as a last resort for data collection, such as when shares are unavailable. 
@@ -69,7 +73,7 @@
     Writes a .ps1 file containing the script that would be run on the remote host.
     Note: Does not connect to the remote host.
     Useful for troubleshooting or for creating a script that will be manually run on a host without WinRM configured.
-    Script will be located in the current working directory (Get-Location) and will be named: <date>_<target computer name>_ForensicCopy_script.ps1
+    Script will be located in the current working directory (Get-Location) and will be named: <date>_Invoke-LiveResponse.ps1
 
 .PARAMETER Raw
     Specifies Files to collect for Forensic Collection Mode in comma seperated format.
@@ -255,7 +259,13 @@
 			$UNC = Invoke-InputValidation -UNC $UNC
 		}
 		Else {
-			$Map = $LocalOut.TrimEnd('\')
+            $Map = $LocalOut.TrimEnd('\')
+
+            # if LocalOut:True set and no writescriptblock throw notification and break 
+            If ($LocalOut -eq $True -and (!$WriteScriptBlock)) {
+                    Write-Host -ForegroundColor Yellow "`nPlease configure a folder for Invoke-LiveResponse -LocalOut over WinRM."
+                    break   
+            }
 		}
     }
 
@@ -264,9 +274,8 @@
         $Content = Invoke-InputValidation -Content $Content
     }
 
-    # Other variables -$Output needs to be passed into scriptblock.
+    # Other variables
     $Results = "$Results\$date`Z_"
-    $Output = "`$Output = `"$Map\$date`Z_`" + `$env:computername"
     $PowerForensics = $False
 
     # Shell mode 
@@ -299,25 +308,31 @@
 
     # Path configuration  - will be included in all ForensicCopy sessions break if no mapped path.
     $sbPath = {
+        $Date = $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd)
+        $Output = $Map + "\" + $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd) + "Z_" + $env:computername
         If (Test-Path $Output -ErrorAction SilentlyContinue){Remove-Item $Output -Recurse -Force -ErrorAction SilentlyContinue | Out-Null}
 
         Try{New-Item $Output -type directory -ErrorAction SilentlyContinue | Out-Null}
         Catch{
-            If(Test-Path $Output -ErrorAction SilentlyContinue){Write-Host "Error: $Output already exists. Previously open on removal."}
+            If(Test-Path $Output -ErrorAction SilentlyContinue){Write-Host "Error: `$Output already exists. Previously open on removal."}
         }
     }
 
+    if ($LocalOut -ne $True) {$sbPath =  [ScriptBlock]::Create("`$Map = '$Map'" + $sbpath.toString())}
+    Else {$sbPath =  [ScriptBlock]::Create("`$Map = `$((Get-Location).Path)`n" + $sbpath.toString())}
+
     if (!$LocalOut){
 		#Ugly, to look into optimisation in future
-		$sbPath =  [ScriptBlock]::Create("`ncmd /c net use $Map $UNC > null 2>&1`nIf(!(Test-Path $Map)){`"Error: Check UNC path and credentials. Unable to Map $Map``n`";break}`n" + $sbPath.ToString())
+		$sbPath =  [ScriptBlock]::Create("`n`t`tcmd /c net use $Map $UNC > null 2>&1`nIf(!(Test-Path $Map)){`"Error: Check UNC path and credentials. Unable to Map $Map``n`";break}`n" + $sbPath.ToString())
     }
         
-    $Scriptblock = [ScriptBlock]::Create($sbPriority.ToString() + "`t" + $Output + "`n" + $sbPath.ToString())
+    $Scriptblock = [ScriptBlock]::Create($sbPriority.ToString() + $sbPath.ToString())
 
     # MemoryDump
     If ($Mem -Or $All){
         $sbMemory = {
-            $MemDumpTool = (get-item $Output).parent.fullname + "winpmem-2.1.post4.exe"
+            $MemDumpTool = ((get-item $Output).parent.fullname).trimEnd("\") + "\winpmem-2.1.post4.exe"
+
             If (Test-Path $MemDumpTool){
                 try{
                     If(Test-Path $Output\memory.zip){Remove-Item "$Output\memory.zip" -Recurse -Force -ErrorAction SilentlyContinue | Out-Null}
@@ -518,7 +533,6 @@
             If (! (Test-Path "$Output\Disk")){
                 New-Item ($Output + "\Disk") -type directory | Out-Null
             }
-
             Write-Host -ForegroundColor Yellow "`tCollecting `$MFT"
             try{Invoke-ForensicCopy -InFile "$env:systemdrive\`$MFT" -OutFile ($Output + "\Disk\`$MFT")}
             Catch{Write-Host "`tError: `$MFT raw copy."}            
@@ -532,7 +546,7 @@
     # $LogFile collection
     If ($Disk -Or $All ){
         $sbLogFile = {
-            If (! (Test-Path "$Output\disk")){
+            If (! (Test-Path "$Output\Disk")){
                 New-Item ($Output + "\Disk") -type directory | Out-Null
             }
 
@@ -549,7 +563,7 @@
     # Dump of USNJrnl
     If ($Usnj -Or $Disk -Or $All){
         $sbUsnj = {
-            If (! (Test-Path "$Output\disk")){
+            If (! (Test-Path "$Output\Disk")){
                 New-Item ($Output + "\Disk") -type directory | Out-Null
             }
             Write-Host -ForegroundColor Yellow "`tCollecting UsnJournal:`$J"
@@ -693,12 +707,81 @@
 		$Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbUnMap.ToString())
 	}
 
-    #### Main ####
-	if ($WriteScriptBlock) {
-		$Scriptblock | Out-String -Width 4096 | Out-File "$(Get-Location)\$($date)_$($ComputerName)_ForensicCopy_script.ps1"
-	}
-    else {
+#### Main ####
+
+    # WriteScriptBlock for local collection and testing
+    if ($WriteScriptBlock) {
+        $LocalScriptBlock = {
+            Write-Host -ForegroundColor Cyan "`nStarting Invoke-LiveResponse."
+            Write-Host -ForegroundColor White "`tLocal Mode."  
+        }
+
+        if ($ForensicCopy) {
+            $FCScriptBlock = {
+                Write-Host -ForegroundColor Cyan "`nStarting ForensicCopy."
+            }
+        $LocalScriptblock = [ScriptBlock]::Create($LocalScriptBlock.ToString() + $FCScriptblock.ToString() + $ScriptBlock.ToString())
+        }
+
         
+        if ($LR) {
+            $LRScriptBlock = {
+                Write-Host -ForegroundColor Cyan "`nStarting LiveResponse."
+                
+                $Content = $((Get-Location).Path + '\Content')
+                $Date = $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd)
+
+                $Output = $((Get-Location).Path) + "\" + $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd) + "Z_" + $env:computername
+                $Results = $Output + "\LR"
+
+                Write-Host "`tFrom Content `n`t$Content"
+                Write-Host "`tNote: Error handling during LiveResponse mode is required to be handled in content.`n"
+                Write-Host "`tTo Results `n`t$Results`n"
+
+                $Scripts = Get-ChildItem -Path "$Content\*.ps1"
+
+                If (Test-Path $Results) {Remove-Item $Results -Recurse -Force -ErrorAction SilentlyContinue | Out-Null}
+                New-Item $Results -type directory -ErrorAction SilentlyContinue | Out-Null
+
+                Foreach ($Script in $Scripts){
+                    Write-Host -ForegroundColor Yellow "`tRunning " $Script.Name
+                    [gc]::collect()
+                    try {$ScriptResults = Invoke-Expression $Script.FullName -ErrorAction SilentlyContinue}
+                    catch {Write-Host -ForegroundColor Red "`tError in $Script"}
+
+                    # depending on Content we can strip properties from Format-List results with | Select-Object above
+                    If (!$csv){
+                        $ScriptResults | Out-File ($Results + "\" + $Script.BaseName + ".txt")
+                    }
+                    ElseIf ($csv){
+                        $delim = ","
+                        $ScriptResults | convertto-csv -NoTypeInformation | % { $_ -replace "`"$delim`"", "$delim"} | % { $_ -replace "^`"",""} | % { $_ -replace "`"$",""} | % { $_ -replace "`"$delim","$delim"}
+                        $ScriptResults | Out-File ($Results + "\" + $Script.BaseName + ".csv") -Encoding ascii
+                    }
+                }
+
+                # Remove null results for simple analysis
+                Foreach ($Item in (Get-ChildItem -Path $Results)){
+                    If ($Item.length -eq 0){Remove-Item -Path $Item.FullName -Force}
+                }
+      
+                If (Get-ChildItem -Path $Results){
+                    Write-Host -ForegroundColor Yellow "`nListing valid results in LiveResponse collection:"
+                    Get-ChildItem -Path $Results | select-object LastWriteTimeUtc, Length, Name | Format-Table -AutoSize
+                }
+                Else {
+                    Write-Host -ForegroundColor Yellow "`nNo valid LiveResponse results"
+                }
+
+                Write-Host -ForegroundColor Cyan "`nLiveResponse over WinRM complete`n"
+            
+            }
+            $LocalScriptblock = [ScriptBlock]::Create($LocalScriptblock.ToString() + $LRScriptBlock.ToString())
+        }
+		$LocalScriptblock | Out-String -Width 4096 | Out-File "$(Get-Location)\$($date)_Invoke-LiveResponse.ps1"
+	}
+    # WinRM execution
+    else {
         Write-Host -ForegroundColor Cyan "`nInvoke-LiveResponse"
         
         # Firstly test We can connect
@@ -760,6 +843,7 @@
             Write-Host "`tNote: Error handling during LiveResponse mode is required to be handled in content.`n"
             $Results = $Results + $Target + "_LR"
             Write-Host "`tTo Results `n`t$Results`n"
+            $LocalOut = "`$((Get-Location).Path)"
 
             $Scripts = Get-ChildItem -Path "$Content\*.ps1"
 
@@ -771,9 +855,12 @@
                 
                 Invoke-Command -Session $Session -Scriptblock {[gc]::collect()}
 
-
-                $ScriptResults = Invoke-Command -Session $Session -FilePath $Script.FullName #| Select-Object -Property * -ExcludeProperty PSComputerName,RunspaceID
-                # depending on Content we can strip properties from Format-List results with | Select-Object above
+                # depending on Content we can strip properties from Format-List results with | Select-Object below
+                try{$ScriptResults = Invoke-Command -Session $Session -FilePath $Script.FullName -ErrorAction Stop} #| Select-Object -Property * -ExcludeProperty PSComputerName,RunspaceID
+                catch{
+                    Write-Host -ForegroundColor Red "`tError in $script"
+                    $ScriptResults = $Null
+                }
 
                 If (!$csv){
                     $ScriptResults | Out-File ($Results + "\" + $Script.BaseName + ".txt")
@@ -818,7 +905,6 @@
         Remove-PSSession -Session $Session
     }
 }
-
 
 
 function Invoke-InputValidation
