@@ -55,7 +55,9 @@
     $LogonSessions = LsaEnumerateLogonSessions
     $Sessions = LsaGetLogonSessionData -LuidPtr $LogonSessions.SessionListPointer -SessionCount $LogonSessions.SessionCount
 
-    Write-Output $Sessions
+    foreach ($session in $Sessions){
+        $Session | Format-table -AutoSize -Wrap
+    }
 }
 
 #region PSReflect

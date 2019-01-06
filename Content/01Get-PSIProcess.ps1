@@ -283,4 +283,4 @@
 }
 
 
-Get-PSIProcess
+Get-PSIProcess | Format-List
