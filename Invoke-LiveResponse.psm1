@@ -5,7 +5,7 @@ function Invoke-LiveResponse
     A Module for Live Response and Forensic collections. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.86
+    Version: 0.87
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
@@ -39,7 +39,10 @@ function Invoke-LiveResponse
     Mandatory Parameter for Target Machine to Invoke-LiveResponse
 
 .PARAMETER Credential
-    Mandatory Parameter to set PSSession credential
+    Optional Parameter to set PSSession credential. Value should be a string formatted like "domain\username". Must either use this or CredentialObj param. 
+
+.PARAMETER CredentialObj
+    Optional Parameter to pass a Powershell credential object instead of a username/password. Must either use this or Credential param.
 
 .PARAMETER Authentication
     Optional parameter for specifying Authentication method
@@ -198,7 +201,8 @@ function Invoke-LiveResponse
     [CmdletBinding()]
     Param(
         [Parameter(Mandatory = $True)][String]$ComputerName,
-        [Parameter(Mandatory = $True)][String]$Credential,
+        [Parameter(Mandatory = $False)][String]$Credential,
+        [Parameter(Mandatory = $False)][ValidateNotNull()][System.Management.Automation.PSCredential][System.Management.Automation.Credential()]$CredentialObj,
         [Parameter(Mandatory = $False)][String]$Authentication,
         [Parameter(Mandatory = $False)][String]$Port,
         [Parameter(Mandatory = $False)][Switch]$useSSL,
@@ -255,6 +259,16 @@ function Invoke-LiveResponse
     If (!$Content){$Content = "$ScriptDir\Content"}
 
     # Input validation
+    If (!$CredentialObj -and !$Credential) {
+        $Cred = Invoke-InputValidation -Credential
+    } 
+	Elseif ($CredentialObj) {
+		$Cred = $CredentialObj
+    }
+	Elseif ($Credential) {
+		$Cred = $Credential
+    }
+    
     If ($Raw -Or $Copy -Or $Mft -Or $Usnj -Or $Pf -Or $Reg -Or $Evtx -Or $User -Or $Disk -Or $Mem -Or $All){
         $ForensicCopy = $True
 		If (!$LocalOut) {
@@ -470,13 +484,13 @@ function Invoke-LiveResponse
         Try{
             Write-Host "`tStarting PSSession on $ComputerName " -NoNewline
             If(!$useSSL) {
-                $Session = New-PSSession -ComputerName $ComputerName -Port $Port -Credential $Credential -Authentication $Authentication -SessionOption (New-PSSessionOption -NoMachineProfile) -ErrorAction Stop
+                $Session = New-PSSession -ComputerName $ComputerName -Port $Port -Credential $Cred -Authentication $Authentication -SessionOption (New-PSSessionOption -NoMachineProfile) -ErrorAction Stop
             }
             ElseIf($useSSL) {
-                $Session = New-PSSession -ComputerName $ComputerName -UseSSL -Port $Port -Credential $Credential -Authentication $Authentication -SessionOption (New-PSSessionOption -NoMachineProfile)  -ErrorAction Stop
+                $Session = New-PSSession -ComputerName $ComputerName -UseSSL -Port $Port -Credential $Cred -Authentication $Authentication -SessionOption (New-PSSessionOption -NoMachineProfile)  -ErrorAction Stop
             }
             Write-Host -ForegroundColor DarkCyan "SUCCESS`n"
-            Write-Host -ForegroundColor Cyan "PSSession with $ComputerName as $Credential"
+            Write-Host -ForegroundColor Cyan "PSSession with $ComputerName as $Cred"
 
             #Pulling Target name for LR and notification
             $Target = Invoke-Command -Session $Session -Scriptblock {$env:computername}
@@ -576,7 +590,8 @@ function Invoke-InputValidation
         [Parameter(Mandatory = $False)][String]$Map,
         [Parameter( Mandatory = $False)][String]$UNC,
         [Parameter(Mandatory = $False)][String]$Content,
-        [Parameter(Mandatory = $False)][String]$Results
+        [Parameter(Mandatory = $False)][String]$Results,
+        [Parameter(Mandatory = $False)][Switch]$Credential
         )
 
     If ($Map) {
@@ -638,6 +653,17 @@ function Invoke-InputValidation
         $Results = $Results.Trim()
         Clear-Host
         return $Results
+    }
+    
+    If ($Credential){
+        Clear-Host
+        Write-Host -ForegroundColor Cyan "`nInvoke-LiveResponse`n"
+        Write-Host -ForegroundColor Yellow "Input validation LiveResponse -Credential - no parameter entered"
+        Write-Host "Enter <domain>\<username> to use to map to $Computername"
+        Write-Host "e.g example.local\dfir"
+        $Cred = Read-Host -Prompt "Enter <domain>\<username>"
+        Clear-Host
+        return $Cred
     }
 }
 
