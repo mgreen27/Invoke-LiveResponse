@@ -5,7 +5,7 @@ function Invoke-LiveResponse
     A Module for Live Response and Forensic collections. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.85
+    Version: 0.86
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
@@ -81,15 +81,17 @@ function Invoke-LiveResponse
 .PARAMETER Raw
     Specifies Files to collect for Forensic Collection Mode in comma seperated format.
     File will leverage Powerforensics to raw copy items. Quotes reccomended for long path, required for csv.
+    For folders all contents will be copied, however there is no capability to recursively download or root folders - e.g "D:\" currently.
     e.g     -Raw "C:\Users\<user>\AppData\Local\Temp\evil.vbs"
-    or      -Raw "C:\Users\<user>\AppData\Local\Temp\evil.vbs,C:\Windows\System32\evil.exe"
+    or      -Raw "C:\Users\<user>\AppData\Local\Temp\evil.vbs,C:\Windows\System32\evil.exe,c:\folder\to\copy"
 
 .PARAMETER Copy
     Specifies Files to collect for Forensic Collection Copy-Item Mode in comma seperated format.
     As the name suggests, Copy-Item Mode copies files using Powershell CopyItem instead of Powerforensics.
+    For folders all contents will be copied, however there is no capability to recursively download or root folders - e.g "D:\" currently.
     Quotes reccomended for long path, required for csv
     e.g     -Copy "C:\Users\<user>\AppData\Local\Temp\evil.vbs"
-    or      -Copy "C:\Users\<user>\AppData\Local\Temp\evil.vbs,C:\Windows\System32\evil.exe"
+    or      -Copy "C:\Users\<user>\AppData\Local\Temp\evil.vbs,C:\Windows\System32\evil.exe,c:\folder\to\copy"
 
 .PARAMETER All
     Optional parameter to select All collection items for ForensicCopy Mode.
@@ -321,7 +323,7 @@ function Invoke-LiveResponse
 
 
     # MemoryDump
-    If ($Mem -Or $All){ 
+    If ($Mem -Or $All) { 
         $sbmemory = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbMemory.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbMemory.ToString())
         $ForensicCopyText = $ForensicCopyText + "`t`t`Memory Dump`n"
@@ -329,6 +331,7 @@ function Invoke-LiveResponse
 
 
     # PowerForensics - reflectively loads PF if Raw collection configured
+
     If ($Raw -Or $Mft -Or $Usnj -Or $Evtx -Or $Reg -Or $User -Or $Disk -Or $All){
         $sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbPowerForensics.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPowerForensics.ToString())
@@ -391,70 +394,37 @@ function Invoke-LiveResponse
         $ForensicCopyText = $ForensicCopyText + "`t`tUser Artefacts`n"
     }
 
-
     # Copy-Item scriptblock needs to be generated at build time
-    If ($Copy){
-        
-        # Convert it to a array of file names. No input validation besides runtime
-        $CopyArray = $Copy.Split(",")
-        
-        foreach ($Item in $CopyArray) {
-            $sbCopy = [ScriptBlock]::Create("`t`$File = `"" + $Item + "`"`n"`
-                + "`t`$FileFolder = Split-Path -Path (Split-Path -Path `"" + $Item + "`" -NoQualifier)`n"`
-                + "`tIf (Test-Path `$File){`n"`
-                + "`t`tIf (! (Test-Path `"`$Output`\files`$FileFolder`")) {New-Item (`"`$Output`\files`$FileFolder`") -type directory | Out-Null}`n"`
-                + "`t`tWrite-Host -ForegroundColor Yellow `"`tCopy-Item $Item`"`n"`
-                + "`t`ttry{[gc]::collect();Copy-Item -Path `$File -Destination `"`$Output\files`$(Split-Path -Path `$File -NoQualifier)`"}`n"`
-                + "`t`tCatch{Write-Host `"`tError: Copy-Item `$File copy. Likely Locked File. Try Raw copy switch.`"}"`
-                + "`t`t`$File = `$Null`n"`
-                + "`t`t`$FileFolder = `$Null`n"`
-                + "`t`t[gc]::collect()`n"`
-                + "`t}`n"`
-                + "`tElse {`tWrite-Host -ForegroundColor Red `"`t$Item not found`"}`n")
+    If ($Copy) {
+        $sbCopy = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbCopy.ps1" -raw))
+        $sbCopy = [ScriptBlock]::Create("`n`$Copy = `"" + $Copy + "`"`n" + $sbCopy.ToString())
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbCopy.ToString())
 
-            $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbCopy.ToString())
-            $ForensicCopyText = $ForensicCopyText + "`t`tCopy-Item $Item`n"
-        }
+        $CopyCount = $Copy.Split(",").count
+        $ForensicCopyText = $ForensicCopyText + "`t`tCopy-Item $CopyCount Items`n"
     }
 
+    #  RawFile Copy scriptblock needs to be generated at build time
+    If ($Raw) {
+        $sbRawCopy = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbRawCopy.ps1" -raw))
+        $sbRawCopy = [ScriptBlock]::Create("`n`$Raw = `"" + $Raw + "`"`n" + $sbRawCopy.ToString())
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbRawCopy.ToString())
 
-    # RawFile Copy scriptblock needs to be generated at build time
-    If ($Raw){
-
-        # Convert it to a array of file names. No input validation besides runtime
-        $FileArray = $Raw.Split(",")
-
-        # Iterate through each file and add to scriptblock
-        foreach ($Item in $FileArray) {
-            $sbFile = [ScriptBlock]::Create("`t`$File = `"" + $Item + "`"`n"`
-                + "`t`$FileFolder = Split-Path -Path (Split-Path -Path `"" + $Item + "`" -NoQualifier)`n"`
-                + "`tIf (Test-Path `$File){`n"`
-                + "`t`tIf (! (Test-Path `"`$Output`\files`$FileFolder`")) {New-Item (`"`$Output`\files`$FileFolder`") -type directory | Out-Null}`n"`
-                + "`t`tWrite-Host -ForegroundColor Yellow `"`tRawCopy $Item`"`n"`
-                + "try{Invoke-ForensicCopy -InFile `$File -OutFile (`$Output + `"\files`" + (Split-Path -Path `$File -NoQualifier))}"`
-                + "Catch{Write-Host `"`tError: `$File raw copy.`"}"`
-                + "`t`t`$File = `$Null`n"`
-                + "`t`t`$FileFolder = `$Null`n"`
-                + "`t`t[gc]::collect()`n"`
-                + "`t}`n"`
-                + "`tElse {`tWrite-Host -ForegroundColor Red `"`t$Item not found`"}`n")
-
-            $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbFile.ToString())
-            $ForensicCopyText = $ForensicCopyText + "`t`t$Item`n"
-        }
+        $CopyCount = $Raw.Split(",").count
+        $ForensicCopyText = $ForensicCopyText + "`t`tRawCopy $CopyCount Items`n"
     }
-
 
     # View ForensicCopy collected files
     $sbViewCollection = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbViewCollection.ps1" -raw))
     $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbViewCollection.ToString())
-
 
     # Unmap share
     if (!$LocalOut) {
 		$sbUnMap = [ScriptBlock]::Create("`nnet use " + $Map + " /DELETE /Y | Out-Null`n")	
 		$Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbUnMap.ToString())
 	}
+
+
 
 #### Main ####
 
@@ -480,15 +450,15 @@ function Invoke-LiveResponse
         $Test=$null
 
         Write-Host "`n`tTesting WinRM is enabled on $ComputerName " -NoNewline
-        If(!$useSSL){
+        If(!$useSSL) {
             $Test = [bool](Test-WSMan -ComputerName $ComputerName -Port $Port -ErrorAction SilentlyContinue)
         }
-        ElseIf($useSSL){
+        ElseIf($useSSL) {
             $Test = [bool](Test-WSMan -ComputerName $ComputerName -Port $Port -UseSSL -ErrorAction SilentlyContinue)
         }
 
         # If test OK continue. Using Test as Results in better error handling.
-        If ($Test -eq "True"){
+        If ($Test -eq "True") {
             Write-Host -ForegroundColor DarkCyan "SUCCESS`n"
         }
         Else{
@@ -499,10 +469,10 @@ function Invoke-LiveResponse
             
         Try{
             Write-Host "`tStarting PSSession on $ComputerName " -NoNewline
-            If(!$useSSL){
+            If(!$useSSL) {
                 $Session = New-PSSession -ComputerName $ComputerName -Port $Port -Credential $Credential -Authentication $Authentication -SessionOption (New-PSSessionOption -NoMachineProfile) -ErrorAction Stop
             }
-            ElseIf($useSSL){
+            ElseIf($useSSL) {
                 $Session = New-PSSession -ComputerName $ComputerName -UseSSL -Port $Port -Credential $Credential -Authentication $Authentication -SessionOption (New-PSSessionOption -NoMachineProfile)  -ErrorAction Stop
             }
             Write-Host -ForegroundColor DarkCyan "SUCCESS`n"
@@ -517,7 +487,7 @@ function Invoke-LiveResponse
             Break
         }
 
-        If($ForensicCopy){
+        If($ForensicCopy) {
             Write-Host -ForegroundColor Cyan "`nStarting ForensicCopy over WinRM..."
             Write-Host "`tUNC Path: " $UNC.split()[0]
             Write-Host "`tAs $Map\$date`Z_$Target`n"
@@ -529,7 +499,7 @@ function Invoke-LiveResponse
             Write-Host -ForegroundColor Cyan "ForensicCopy over WinRM complete`n"
         }
         
-        If($LR){
+        If($LR) {
             Write-Host -ForegroundColor Cyan "`nStarting LiveResponse over WinRM..."
             Write-Host "`tFrom Content `n`t$Content"
             Write-Host "`tNote: Error handling during LiveResponse mode is required to be handled in content.`n"
@@ -542,7 +512,7 @@ function Invoke-LiveResponse
             If (Test-Path $Results) {Remove-Item $Results -Recurse -Force -ErrorAction SilentlyContinue | Out-Null}
             New-Item $Results -type directory -ErrorAction SilentlyContinue | Out-Null
 
-            Foreach ($Script in $Scripts){
+            Foreach ($Script in $Scripts) {
                 Write-Host -ForegroundColor Yellow "`tRunning " $Script.Name
                 
                 Invoke-Command -Session $Session -Scriptblock {[gc]::collect()}
@@ -554,10 +524,10 @@ function Invoke-LiveResponse
                     $ScriptResults = $Null
                 }
 
-                If (!$csv){
+                If (!$csv) {
                     $ScriptResults | Out-File ($Results + "\" + $Script.BaseName + ".txt")
                 }
-                ElseIf ($csv){
+                ElseIf ($csv) {
                     $delim = ","
                     $ScriptResults | convertto-csv -NoTypeInformation | % { $_ -replace "`"$delim`"", "$delim"} | % { $_ -replace "^`"",""} | % { $_ -replace "`"$",""} | % { $_ -replace "`"$delim","$delim"}
                     $ScriptResults | Out-File ($Results + "\" + $Script.BaseName + ".csv") -Encoding ascii
@@ -565,22 +535,22 @@ function Invoke-LiveResponse
             }
 
             # Remove null results for simple analysis
-            Foreach ($Item in (Get-ChildItem -Path $Results)){
+            Foreach ($Item in (Get-ChildItem -Path $Results)) {
                 If ($Item.length -eq 0){Remove-Item -Path $Item.FullName -Force}
             }
             
-            If (Get-ChildItem -Path $Results -Recurse){
+            If (Get-ChildItem -Path $Results -Recurse) {
                 Write-Host -ForegroundColor Yellow "`nListing valid results in LiveResponse collection:"
                 Get-ChildItem -Path $Results -Recurse | select-object LastWriteTimeUtc, Length, Name | Format-Table -AutoSize
             }
-            Else {
+            Else{
                 Write-Host -ForegroundColor Yellow "`nNo valid LiveResponse results"
             }
 
             Write-Host -ForegroundColor Cyan "`nLiveResponse over WinRM complete`n"
         }
                             
-        If($Shell){
+        If($Shell) {
             Write-Host -NoNewline "`nTo access PSSession shell on $ComputerName, please run "
             Write-Host -NoNewline -ForegroundColor Yellow "Get-PSSession "
             Write-Host "To view availible Session Ids"
@@ -609,8 +579,8 @@ function Invoke-InputValidation
         [Parameter(Mandatory = $False)][String]$Results
         )
 
-    If ($Map){
-        while ($Map -notmatch "^[a-zA-Z]\:$"){
+    If ($Map) {
+        while ($Map -notmatch "^[a-zA-Z]\:$") {
             Clear-Host
             Write-Host -ForegroundColor Cyan "`nInvoke-LiveResponse`n"
             Write-Host -ForegroundColor Yellow "Input validation ForensicCopy -Map"
@@ -622,7 +592,7 @@ function Invoke-InputValidation
         return $Map
     }
 
-    If ($UNC){
+    If ($UNC) {
         while ($UNC.split()[0] -notmatch "\\\\(\w+|\b(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\b)\\\w+"`
             -or $UNC.split()[1] -notmatch "(\/user\:[a-zA-Z][a-zA-Z0-9\-\.]{0,61}[a-zA-Z]\\\w[\w\.\- ]*)?"`
             -or $UNC.split()[2] -notmatch "(\w+)?" -or !($Map.split().Length -eq 1 -or 3)){
@@ -638,8 +608,8 @@ function Invoke-InputValidation
         return $UNC            
     }
 
-    If ($Content){
-        while ($Content -notmatch "^[a-zA-Z]:\\(((?![<>:\`"\/\\|?*]).)+((?<![ .])\\)?)*$"){
+    If ($Content) {
+        while ($Content -notmatch "^[a-zA-Z]:\\(((?![<>:\`"\/\\|?*]).)+((?<![ .])\\)?)*$") {
             Clear-Host
             Write-Host -ForegroundColor Cyan "`nInvoke-LiveResponse`n"
             Write-Host -ForegroundColor Yellow "Input validation LiveResponse -Content"
@@ -654,7 +624,7 @@ function Invoke-InputValidation
         return $Content
     }
     
-    If ($Results){
+    If ($Results) {
         while ($Results -notmatch "^[a-zA-Z]:\\(((?![<>:\`"\/\\|?*]).)+((?<![ .])\\)?)*$"){
             Clear-Host
             Write-Host -ForegroundColor Cyan "`nInvoke-LiveResponse`n"
@@ -798,9 +768,9 @@ function Invoke-MaxMemory
     $Enumerate = $PSBoundParameters.ContainsKey('Enumerate')
 
     # Set WinRM Defaults for Auth and Port    
-    If (!$Authentication){$Authentication = "Kerberos"}
-    If ($useSSL -And !$Port){$Port = "5986"}
-    If (!$Port){$Port = "5985"}
+    If (!$Authentication) {$Authentication = "Kerberos"}
+    If ($useSSL -And !$Port) {$Port = "5986"}
+    If (!$Port) {$Port = "5985"}
 
     Write-Host -ForegroundColor Yellow "`nRunning Invoke-MaxMemoryMB`n"
 
