@@ -1,11 +1,11 @@
-﻿function Invoke-LiveResponse
+function Invoke-LiveResponse
 {
 <#
 .SYNOPSIS
     A Module for Live Response and Forensic collections. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.85
+    Version: 0.86
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
@@ -331,7 +331,8 @@
 
 
     # PowerForensics - reflectively loads PF if Raw collection configured
-    If ($Raw -Or $Mft -Or $Usnj -Or $Evtx -Or $Reg -Or $User -Or $Disk -Or $All) {
+
+    If ($Raw -Or $Mft -Or $Usnj -Or $Evtx -Or $Reg -Or $User -Or $Disk -Or $All){
         $sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbPowerForensics.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPowerForensics.ToString())
         $PowerForensics = $True
@@ -339,60 +340,59 @@
 
 
     # Add Invoke-BulkCopy for bulk copy usecases
-    If ($ForensicCopy) {
+    If ($ForensicCopy){
         $sbBulkCopy = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbBulkCopy.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbBulkCopy.ToString())
     }
 
     # $MFT collection
-    If ($Mft -Or $Disk -Or $All) {
+    If ($Mft -Or $Disk -Or $All){
         $sbMft = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbMft.ps1" -raw))       
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbMft.ToString())
         $ForensicCopyText = $ForensicCopyText + "`t`t`$MFT`n"
     }
 
     # $LogFile collection
-    If ($Disk -Or $All ) {
+    If ($Disk -Or $All ){
         $sbLogFile = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbLogfile.ps1" -raw))    
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbLogFile.ToString())
         $ForensicCopyText = $ForensicCopyText + "`t`t`$LogFile`n"
     }    
 
     # Dump of USNJrnl
-    If ($Usnj -Or $Disk -Or $All) {
+    If ($Usnj -Or $Disk -Or $All){
         $sbUsnj = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbUsnj.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbUsnj.ToString())
         $ForensicCopyText = $ForensicCopyText + "`t`tUsnJournal:`$J`n" 
     }
 
     # Prefetch
-    If ($Pf -Or $All) {
+    If ($Pf -Or $All){
         $sbPf = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbPrefetch.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPf.ToString())
         $ForensicCopyText = $ForensicCopyText + "`t`tPrefetch files`n"
     }
 
     # Registry Hive collection
-    If ($Reg -Or $All) {
+    If ($Reg -Or $All){
         $sbReg = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbReg.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbReg.ToString())
         $ForensicCopyText = $ForensicCopyText + "`t`tRegistry Hives`n"
     }
     
     # Windows EventLog collection    
-    If ($Evtx -Or $All) {
+    If ($Evtx -Or $All){
         $sbEvtx = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbEvtx.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbEvtx.ToString())
         $ForensicCopyText = $ForensicCopyText + "`t`tWindows Event Logs`n"
     }
 
     # User artefact collection, currently user hives only
-    If ($User -Or $All) {
+    If ($User -Or $All){
         $sbUser = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbUser.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbUser.ToString())
         $ForensicCopyText = $ForensicCopyText + "`t`tUser Artefacts`n"
     }
-
 
     # Copy-Item scriptblock needs to be generated at build time
     If ($Copy) {
@@ -404,7 +404,6 @@
         $ForensicCopyText = $ForensicCopyText + "`t`tCopy-Item $CopyCount Items`n"
     }
 
-
     #  RawFile Copy scriptblock needs to be generated at build time
     If ($Raw) {
         $sbRawCopy = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbRawCopy.ps1" -raw))
@@ -415,17 +414,16 @@
         $ForensicCopyText = $ForensicCopyText + "`t`tRawCopy $CopyCount Items`n"
     }
 
-
     # View ForensicCopy collected files
     $sbViewCollection = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbViewCollection.ps1" -raw))
     $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbViewCollection.ToString())
-
 
     # Unmap share
     if (!$LocalOut) {
 		$sbUnMap = [ScriptBlock]::Create("`nnet use " + $Map + " /DELETE /Y | Out-Null`n")	
 		$Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbUnMap.ToString())
 	}
+
 
 
 #### Main ####
