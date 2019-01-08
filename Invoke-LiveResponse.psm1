@@ -5,7 +5,7 @@ function Invoke-LiveResponse
     A Module for Live Response and Forensic collections. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.86
+    Version: 0.87
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
@@ -36,10 +36,16 @@ function Invoke-LiveResponse
     - Expand scope to enable at scale enterprise wide detection/hunting through Powershell Start-Job capabilities.
 
 .PARAMETER ComputerName
-    Mandatory Parameter for Target Machine to Invoke-LiveResponse
+    Optional Parameter for Target Machine to Invoke-LiveResponse. 
+    Required if accessing a remote machine over the network.
 
 .PARAMETER Credential
-    Mandatory Parameter to set PSSession credential
+    Optional Parameter to set PSSession credential. Value should be a string formatted like "domain\username". 
+    A credential (this or CredentialObj param) is required if accessing a remote machine over the network.
+
+.PARAMETER CredentialObj
+    Optional Parameter to pass a Powershell credential object instead of a username/password.
+    A credential (this or Credential param) is required if accessing a remote machine over the network.
 
 .PARAMETER Authentication
     Optional parameter for specifying Authentication method
@@ -197,8 +203,9 @@ function Invoke-LiveResponse
 #>
     [CmdletBinding()]
     Param(
-        [Parameter(Mandatory = $True)][String]$ComputerName,
-        [Parameter(Mandatory = $True)][String]$Credential,
+        [Parameter(Mandatory = $False)][String]$ComputerName,
+        [Parameter(Mandatory = $False)][String]$Credential,
+        [Parameter(Mandatory = $False)][ValidateNotNull()][System.Management.Automation.PSCredential][System.Management.Automation.Credential()]$CredentialObj,
         [Parameter(Mandatory = $False)][String]$Authentication,
         [Parameter(Mandatory = $False)][String]$Port,
         [Parameter(Mandatory = $False)][Switch]$useSSL,
@@ -255,6 +262,22 @@ function Invoke-LiveResponse
     If (!$Content){$Content = "$ScriptDir\Content"}
 
     # Input validation
+    If (!$WriteScriptBlock) {
+        If (!$ComputerName) {
+            $ComputerName = Invoke-InputValidation -ComputerName
+        }
+        
+        If (!$CredentialObj -and !$Credential) {
+            $Cred = Invoke-InputValidation -Credential
+        } 
+        Elseif ($CredentialObj) {
+            $Cred = $CredentialObj
+        }
+        Elseif ($Credential) {
+            $Cred = $Credential
+        }
+    }
+    
     If ($Raw -Or $Copy -Or $Mft -Or $Usnj -Or $Pf -Or $Reg -Or $Evtx -Or $User -Or $Disk -Or $Mem -Or $All){
         $ForensicCopy = $True
 		If (!$LocalOut) {
@@ -470,13 +493,13 @@ function Invoke-LiveResponse
         Try{
             Write-Host "`tStarting PSSession on $ComputerName " -NoNewline
             If(!$useSSL) {
-                $Session = New-PSSession -ComputerName $ComputerName -Port $Port -Credential $Credential -Authentication $Authentication -SessionOption (New-PSSessionOption -NoMachineProfile) -ErrorAction Stop
+                $Session = New-PSSession -ComputerName $ComputerName -Port $Port -Credential $Cred -Authentication $Authentication -SessionOption (New-PSSessionOption -NoMachineProfile) -ErrorAction Stop
             }
             ElseIf($useSSL) {
-                $Session = New-PSSession -ComputerName $ComputerName -UseSSL -Port $Port -Credential $Credential -Authentication $Authentication -SessionOption (New-PSSessionOption -NoMachineProfile)  -ErrorAction Stop
+                $Session = New-PSSession -ComputerName $ComputerName -UseSSL -Port $Port -Credential $Cred -Authentication $Authentication -SessionOption (New-PSSessionOption -NoMachineProfile)  -ErrorAction Stop
             }
             Write-Host -ForegroundColor DarkCyan "SUCCESS`n"
-            Write-Host -ForegroundColor Cyan "PSSession with $ComputerName as $Credential"
+            Write-Host -ForegroundColor Cyan "PSSession with $ComputerName as $Cred"
 
             #Pulling Target name for LR and notification
             $Target = Invoke-Command -Session $Session -Scriptblock {$env:computername}
@@ -576,7 +599,9 @@ function Invoke-InputValidation
         [Parameter(Mandatory = $False)][String]$Map,
         [Parameter( Mandatory = $False)][String]$UNC,
         [Parameter(Mandatory = $False)][String]$Content,
-        [Parameter(Mandatory = $False)][String]$Results
+        [Parameter(Mandatory = $False)][String]$Results,
+        [Parameter(Mandatory = $False)][Switch]$ComputerName,
+        [Parameter(Mandatory = $False)][Switch]$Credential
         )
 
     If ($Map) {
@@ -638,6 +663,28 @@ function Invoke-InputValidation
         $Results = $Results.Trim()
         Clear-Host
         return $Results
+    }
+    
+    If ($ComputerName){
+        Clear-Host
+        Write-Host -ForegroundColor Cyan "`nInvoke-LiveResponse`n"
+        Write-Host -ForegroundColor Yellow "Input validation LiveResponse -ComputerName - no parameter entered for remote connection"
+        Write-Host "Enter fully qualified computer name as the remote target for Invoke-LiveResponse"
+        Write-Host "e.g workstation.example.local"
+        $ComputerNameAdded = Read-Host -Prompt "Enter remote computer name"
+        Clear-Host
+        return $ComputerNameAdded
+    }
+
+    If ($Credential){
+        Clear-Host
+        Write-Host -ForegroundColor Cyan "`nInvoke-LiveResponse`n"
+        Write-Host -ForegroundColor Yellow "Input validation LiveResponse -Credential - no parameter entered for remote connection"
+        Write-Host "Enter <domain>\<username> to use to map to $Computername"
+        Write-Host "e.g example.local\dfir"
+        $Cred = Get-Credential
+        Clear-Host
+        return $Cred
     }
 }
 
