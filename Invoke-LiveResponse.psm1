@@ -128,6 +128,10 @@ function Invoke-LiveResponse
     Optional Forensic Copy Mode parameter to select collection of User artefacts and registry hive files 
     Currently includes ntuser.dat and UsrClass.dat
 
+.PARAMETER Browser
+    Optional Forensic Copy Mode parameter to select per-user browser artefacts. 
+    Currently includes all forensically-interesting Chrome artefacts, more browsers will be added.
+
 .PARAMETER LR
     An optional parameter to select Live Response mode. LiveResponse mode will execute any Powershell scripts placed inside a content folder and output to a Results folder on the collector machine.
     
@@ -224,6 +228,7 @@ function Invoke-LiveResponse
         [Parameter(Mandatory = $False)][Switch]$Reg,
         [Parameter(Mandatory = $False)][Switch]$Evtx,
         [Parameter(Mandatory = $False)][Switch]$User,
+        [Parameter(Mandatory = $False)][Switch]$Browser,
         [Parameter(Mandatory = $False)][Switch]$LR,
         [Parameter(Mandatory = $False)][String]$Content,
         [Parameter(Mandatory = $False)][String]$Results,
@@ -245,6 +250,7 @@ function Invoke-LiveResponse
     $Pf = $PSBoundParameters.ContainsKey('Pf')
     $Reg = $PSBoundParameters.ContainsKey('Reg')
     $User = $PSBoundParameters.ContainsKey('User')
+    $Browser = $PSBoundParameters.ContainsKey('Browser')
 
     # Live Response
     $LR = $PSBoundParameters.ContainsKey('LR')
@@ -278,7 +284,7 @@ function Invoke-LiveResponse
         }
     }
     
-    If ($Raw -Or $Copy -Or $Mft -Or $Usnj -Or $Pf -Or $Reg -Or $Evtx -Or $User -Or $Disk -Or $Mem -Or $All){
+    If ($Raw -Or $Copy -Or $Mft -Or $Usnj -Or $Pf -Or $Reg -Or $Evtx -Or $User -Or $Disk -Or $Mem -Or $Browser -Or $All){
         $ForensicCopy = $True
 		If (!$LocalOut) {
 			If (!$Map){$Map = $True}
@@ -352,10 +358,9 @@ function Invoke-LiveResponse
         $ForensicCopyText = $ForensicCopyText + "`t`t`Memory Dump`n"
     }
 
-
     # PowerForensics - reflectively loads PF if Raw collection configured
 
-    If ($Raw -Or $Mft -Or $Usnj -Or $Evtx -Or $Reg -Or $User -Or $Disk -Or $All){
+    If ($Raw -Or $Mft -Or $Usnj -Or $Evtx -Or $Reg -Or $User -Or $Disk -Or $Browser -Or $All){
         $sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbPowerForensics.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPowerForensics.ToString())
         $PowerForensics = $True
@@ -415,6 +420,13 @@ function Invoke-LiveResponse
         $sbUser = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbUser.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbUser.ToString())
         $ForensicCopyText = $ForensicCopyText + "`t`tUser Artefacts`n"
+    }
+
+    # Browser artefact collection
+    If ($Browser -Or $All){
+        $sbUser = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbBrowser.ps1" -raw))
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbUser.ToString())
+        $ForensicCopyText = $ForensicCopyText + "`t`tUser Browser Artefacts`n"
     }
 
     # Copy-Item scriptblock needs to be generated at build time
