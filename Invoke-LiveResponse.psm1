@@ -100,7 +100,10 @@ function Invoke-LiveResponse
     or      -Copy "C:\Users\<user>\AppData\Local\Temp\evil.vbs,C:\Windows\System32\evil.exe,c:\folder\to\copy"
 
 .PARAMETER All
-    Optional parameter to select All collection items for ForensicCopy Mode.
+    Optional parameter to select All base collection items for ForensicCopy Mode.
+
+.PARAMETER Custom
+    Optional parameter to build collection via ..\ScriptBlock\Custom folder
 
 .PARAMETER Mem
     Optional parameter to select Memory collection for ForensicCopy Mode. Default uses Winpmem - winpmem-2.1.post4.exe (latest and greatest) which is requried on UNC path or LocalOut path.
@@ -216,6 +219,7 @@ function Invoke-LiveResponse
         [Parameter(Mandatory = $False)][String]$Raw,
         [Parameter(Mandatory = $False)][String]$Copy,
         [Parameter(Mandatory = $False)][Switch]$All,
+        [Parameter(Mandatory = $False)][Switch]$Custom,
         [Parameter(Mandatory = $False)][Switch]$Mem,
         [Parameter(Mandatory = $False)][Switch]$Disk,
         [Parameter(Mandatory = $False)][Switch]$Mft,
@@ -278,7 +282,7 @@ function Invoke-LiveResponse
         }
     }
     
-    If ($Raw -Or $Copy -Or $Mft -Or $Usnj -Or $Pf -Or $Reg -Or $Evtx -Or $User -Or $Disk -Or $Mem -Or $All){
+    If ($Raw -Or $Copy -Or $Mft -Or $Usnj -Or $Pf -Or $Reg -Or $Evtx -Or $User -Or $Disk -Or $Mem -Or $All -Or $Custom){
         $ForensicCopy = $True
 		If (!$LocalOut) {
 			If (!$Map){$Map = $True}
@@ -331,7 +335,7 @@ function Invoke-LiveResponse
     $sbPriority = [ScriptBlock]::Create("`$Process = Get-Process -Id `$Pid`n`$Process.PriorityClass = 'IDLE'`n")
 
     # Path configuration  - will be included in all ForensicCopy sessions
-    $sbPath = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbPath.ps1" -raw))
+    $sbPath = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\base\sbPath.ps1" -raw))
 
     if ($LocalOut -ne $True) {
         $sbPath2 =  [ScriptBlock]::Create("`ncmd /c net use $Map $UNC > null 2>&1`n`n")
@@ -355,16 +359,16 @@ function Invoke-LiveResponse
 
     # PowerForensics - reflectively loads PF if Raw collection configured
 
-    If ($Raw -Or $Mft -Or $Usnj -Or $Evtx -Or $Reg -Or $User -Or $Disk -Or $All){
-        $sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbPowerForensics.ps1" -raw))
+    If ($Raw -Or $Mft -Or $Usnj -Or $Evtx -Or $Reg -Or $User -Or $Disk -Or $All -Or $Custom){
+        $sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\base\sbPowerForensics.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPowerForensics.ToString())
         $PowerForensics = $True
         }
 
 
     # Add Invoke-BulkCopy for bulk copy usecases
-    If ($ForensicCopy){
-        $sbBulkCopy = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbBulkCopy.ps1" -raw))
+    If ($ForensicCopy -Or $Pf -Or $Copy){
+        $sbBulkCopy = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\base\sbBulkCopy.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbBulkCopy.ToString())
     }
 
@@ -419,7 +423,7 @@ function Invoke-LiveResponse
 
     # Copy-Item scriptblock needs to be generated at build time
     If ($Copy) {
-        $sbCopy = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbCopy.ps1" -raw))
+        $sbCopy = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\base\sbCopy.ps1" -raw))
         $sbCopy = [ScriptBlock]::Create("`n`$Copy = `"" + $Copy + "`"`n" + $sbCopy.ToString())
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbCopy.ToString())
 
@@ -429,7 +433,7 @@ function Invoke-LiveResponse
 
     #  RawFile Copy scriptblock needs to be generated at build time
     If ($Raw) {
-        $sbRawCopy = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbRawCopy.ps1" -raw))
+        $sbRawCopy = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\base\sbRawCopy.ps1" -raw))
         $sbRawCopy = [ScriptBlock]::Create("`n`$Raw = `"" + $Raw + "`"`n" + $sbRawCopy.ToString())
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbRawCopy.ToString())
 
@@ -437,8 +441,20 @@ function Invoke-LiveResponse
         $ForensicCopyText = $ForensicCopyText + "`t`tRawCopy $CopyCount Items`n"
     }
 
+
+    #  Custom collection of scriptblocks added to ..\scriptblock\custom folder
+    If ($Custom) {
+        #Foreach ($script in (Get-ChildItem -Path "$PSScriptRoot\Scriptblock" -Filter*.ps1).FullName) {
+        Foreach ($script in (Get-ChildItem -Path "$PSScriptRoot\Scriptblock\Custom" -Filter "*.ps1").FullName) {
+            $sbCustom = [System.Management.Automation.ScriptBlock]::Create((get-content $script -raw))
+            $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbCustom.ToString())
+
+            $ForensicCopyText = $ForensicCopyText + "`t`tCustom " + (split-path $script -Leaf) + "`n"
+        }
+    }
+
     # View ForensicCopy collected files
-    $sbViewCollection = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbViewCollection.ps1" -raw))
+    $sbViewCollection = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\base\sbViewCollection.ps1" -raw))
     $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbViewCollection.ToString())
 
     # Unmap share
@@ -460,7 +476,7 @@ function Invoke-LiveResponse
         }
 
         if ($LR) {
-            $sbLocalLiveResponse = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\sbLocalLiveResponse.ps1" -raw))
+            $sbLocalLiveResponse = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Scriptblock\base\sbLocalLiveResponse.ps1" -raw))
             $LocalScriptblock = [ScriptBlock]::Create($LocalScriptblock.ToString() + "`n" + $sbLocalLiveResponse.ToString())
         }
 		$LocalScriptblock | Out-String -Width 4096 | Out-File "$(Get-Location)\$($date)_Invoke-LiveResponse.ps1"
