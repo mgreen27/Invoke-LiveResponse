@@ -2,57 +2,106 @@
 function Invoke-BulkCopy{
     [CmdletBinding()]
     Param(
-        [Parameter( Mandatory = $True)][String]$folder,
-        [Parameter( Mandatory = $True)][String]$target,
+        [Parameter( Mandatory = $True)][String]$path,
+        [Parameter( Mandatory = $True)][String]$dest,
         [Parameter( Mandatory = $False)][String]$filter,
         [Parameter( Mandatory = $False)][String]$exclude,
+        [Parameter( Mandatory = $False)][String]$include,
         [Parameter( Mandatory = $False)][String]$where,
         [Parameter( Mandatory = $False)][Switch]$recurse,
         [Parameter( Mandatory = $False)][Switch]$forensic
     )
 
-    if(test-path $folder){
+    if(test-path -path $path){
         if ($recurse) {
             if ($filter) {
                 if ($exclude) {
-                    if ($where) { $items = get-childitem $folder -Recurse -Filter $filter -Exclude $exclude -Force | Where-Object { $where } }
-                    else { $items = get-childitem $folder -Recurse -Filter $filter -Exclude $exclude -Force }
+                    if ($include) {
+                        if ($where) { $items = get-childitem -path $path -Recurse -Filter $filter -Exclude $exclude -Include $Include -Force | Where-Object { $where } }
+                        else { $items = get-childitem -path $path -Recurse -Filter $filter -Exclude $exclude -Include $Include -Force }
+                    }
+                    else {
+                        if ($where) { $items = get-childitem -path $path -Recurse -Filter $filter -Exclude $exclude -Force | Where-Object { $where } }
+                        else { $items = get-childitem -path $path -Recurse -Filter $filter -Exclude $exclude -Force }
+                    }
                 }
                 else {
-                    if ($where) { $items = get-childitem $folder -Recurse -Filter $filter -Force | Where-Object { $where } }
-                    else { $items = get-childitem $folder -Recurse -Filter $filter -Force }
+                    if ($include) {
+                        if ($where) { $items = get-childitem -path $path -Recurse -Filter $filter -Include $include -Force | Where-Object { $where } }
+                        else { $items = get-childitem -path $path -Recurse -Filter $filter -Include $include -Force }
+                    }
+                    Else {
+                        if ($where) { $items = get-childitem -path $path -Recurse -Filter $filter -Force | Where-Object { $where } }
+                        else { $items = get-childitem -path $path -Recurse -Filter $filter -Force }
+                    }
                 }
             }
             else{
                 if ($exclude) {
-                    if ($where) { $items = get-childitem $folder -Recurse -exclude $exclude -Force | Where-Object { $where } }
-                    else { $items = get-childitem $folder -Recurse -exclude $exclude -Force }
+                    if ($include) {
+                        if ($where) { $items = get-childitem -path $path -Recurse -exclude $exclude -Include $include -Force | Where-Object { $where } }
+                        else { $items = get-childitem -path $path -Recurse -exclude $exclude -Include $include -Force }
+                    }
+                    Else {
+                        if ($where) { $items = get-childitem -path $path -Recurse -exclude $exclude -Force | Where-Object { $where } }
+                        else { $items = get-childitem -path $path -Recurse -exclude $exclude -Force }
+                    }
                 }
                 else {
-                    if ($where) { $items = get-childitem $folder -Recurse -Force | Where-Object { $where } }
-                    else { $items = get-childitem $folder -Recurse -Force }
+                    if ($include) {
+                        if ($where) { $items = get-childitem -path $path -Include $include -Recurse -Force | Where-Object { $where } }
+                        else { $items = get-childitem -path $path -Include $include -Recurse -Force }
+                    }
+                    Else {
+                        if ($where) { $items = get-childitem -path $path -Recurse -Force | Where-Object { $where } }
+                        else { $items = get-childitem -path $path -Recurse -Force }
+                    }
                 }
             }
         }
         else {
             if ($filter) {
                 if ($exclude) {
-                    if ($where) { $items = get-childitem $folder -Filter $filter -exclude $exclude -Force | Where-Object { $where } }
-                    else { $items = get-childitem $folder -Filter $filter -exclude $exclude -Force }
+                    if ($include) {
+                        if ($where) { $items = get-childitem -path $path -Filter $filter -exclude $exclude -Include $include -Force | Where-Object { $where } }
+                        else { $items = get-childitem -path $path -Filter $filter -exclude $exclude -Include $include -Force }
+                    }
+                    Else {
+                        if ($where) { $items = get-childitem -path $path -Filter $filter -exclude $exclude -Force | Where-Object { $where } }
+                        else { $items = get-childitem -path $path -Filter $filter -exclude $exclude -Force }
+                    }
                 }
                 else {
-                    if ($where) { $items = get-childitem $folder -Filter $filter -Force | Where-Object { $where } }
-                    else { $items = get-childitem $folder -Filter $filter -Force }
+                    if ($include) {
+                        if ($where) { $items = get-childitem -path $path -Filter $filter -Include $include -Force | Where-Object { $where } }
+                        else { $items = get-childitem -path $path -Filter $filter -Include "$include" -Force }
+                    }
+                    Else {
+                        if ($where) { $items = get-childitem -path $path -Filter $filter -Force | Where-Object { $where } }
+                        else { $items = get-childitem -path $path -Filter $filter -Force }
+                    }
                 }
             }
             else{
                 if ($exclude) {
-                    if ($where) { $items = get-childitem $folder -exclude $exclude -Force | Where-Object { $where } }
-                    else { $items = get-childitem $folder -exclude $exclude -Force }
+                    if ($include) {
+                        if ($where) { $items = get-childitem -path $path -exclude $exclude -Include $include -Force | Where-Object { $where } }
+                        else { $items = get-childitem -path $path -exclude $exclude -Include $include -Force }
+                    }
+                    Else {
+                        if ($where) { $items = get-childitem -path $path -exclude $exclude -Force | Where-Object { $where } }
+                        else { $items = get-childitem -path $path -exclude $exclude -Force }
+                    }
                 }
                 else {
-                    if ($where) { $items = get-childitem $folder -exclude $exclude -Force | Where-Object { $where } }
-                    else { $items = get-childitem $folder -exclude $exclude -Force }
+                    if ($include) {
+                        if ($where) { $items = get-childitem -path $path -exclude $exclude -Include $include -Force | Where-Object { $where } }
+                        else { $items = get-childitem -path $path -exclude $exclude -Include $include -Force }
+                    }
+                    Else {
+                        if ($where) { $items = get-childitem -path $path -exclude $exclude -Force | Where-Object { $where } }
+                        else { $items = get-childitem -path $path -exclude $exclude -Force }
+                    }
                 }
             }
         }
@@ -60,7 +109,7 @@ function Invoke-BulkCopy{
         $CopyTargets = @{} # build hashtable of targets
 
         $items | ForEach-Object { 
-            $out = $_.FullName -replace [regex]::escape($folder), $target
+            $out = $_.FullName -replace [regex]::escape($path), $dest
 
             if ($_.PSIsContainer) {
                 $CopyTargets[$CopyTargets.count] = @($_.FullName,$out,"FOLDER")
