@@ -6,7 +6,7 @@ The current scope of [Invoke-LiveResponse](https://www.linkedin.com/pulse/invoke
 * Leverages a scriptblock for each configured function of the script. 
 * Common forensic artefacts and custom file collections.
 * WinPMem for memory support
-* Depending on the selected switches, each selected capability is joined at run time to build the scriptblock pushed out to the target machine. 
+* Depending on the selected switches, each selected capability is joined at run time to build the scriptblock relevant to usecase.
 
 ### Live Response
 * Inspired by the Kansa Framework, LiveResponse mode will execute any Powershell scripts placed inside a content folder.
@@ -14,15 +14,15 @@ The current scope of [Invoke-LiveResponse](https://www.linkedin.com/pulse/invoke
 * The benefit of this method is the ability to operationalise new capability easily by dropping in new content with desired StdOut.
 
 ### Other content
-* Get-Powerforensics.ps1 - Installs Powerforensics to user profile
-* Get-Forensicating.ps1 - Installs Invoke-LiveResponse and Powerforensics to user profile.
+* Get-Forensicating.ps1 - Installs Invoke-LiveResponse to user profile.
+* Get-Powerforensics.ps1 - xInstalls Powerforensics to user profile (no longer requred).
 * Invoke-ForensicCopy.ps1 - Powershell function to leverage Powerforensics API for raw copy with best performance.
 * Content - Contains some nice content from around the place, mainly from Kansa and SpectreOps ACE project. Ill add more as I remember / find new things.
+* Scriptblocks - Contains Invoke-Liveresponse scriptblocks for building ForensicCopy mode and LiveResponse script.
+
 
 ### Installation
 1) Download Powershell-IR and rename to Invoke-LiveResponse into Powershell profile.
-
-2) Download Powerforensics into Powershell Profile
 
 To run: Import-Module Invoke-LiveResponse
 
