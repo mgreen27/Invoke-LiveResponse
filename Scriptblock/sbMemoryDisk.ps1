@@ -2,5 +2,5 @@
 # Memory Disk artefacts
 Write-Host -ForegroundColor Yellow "`tCollecting Memory disk artefacts"
 
-Invoke-BulkCopy -folder "$env:systemdrive" -target "$Output\Memory" -filter "*.sys" -forensic
-Invoke-BulkCopy -folder "$env:systemdrive\Windows" -target "$Output\Memory" -filter "*.dmp" -forensic
+Invoke-BulkCopy -path "$env:systemdrive" -dest "$Output\Memory" -filter "*.sys" -forensic
+Invoke-BulkCopy -path "$env:systemdrive\Windows" -dest "$Output\Memory" -filter "*.dmp" -forensic
