@@ -5,7 +5,7 @@ function Invoke-LiveResponse
     A Module for Live Response and Forensic collections. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.90
+    Version: 0.91
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
@@ -112,6 +112,9 @@ function Invoke-LiveResponse
 .PARAMETER Pf
     Optional Forensic Copy Mode parameter to select collection of prefetch files. Pf uses Copy-Item command-let and does not invoke installation of Powerforensics if run alone.
 
+.PARAMETER Execution
+    Optional Forensic Copy Mode parameter to select collection of Evidence of Execution.
+
 .PARAMETER Evtx
     Optional ForensicCopy Mode parameter to select collection of Windows event Logs.
 
@@ -217,6 +220,7 @@ function Invoke-LiveResponse
         [Parameter(Mandatory = $False)][Switch]$Mft,
         [Parameter(Mandatory = $False)][Switch]$Usnj,
         [Parameter(Mandatory = $False)][Switch]$Pf,
+        [Parameter(Mandatory = $False)][Switch]$Execution,
         [Parameter(Mandatory = $False)][Switch]$Reg,
         [Parameter(Mandatory = $False)][Switch]$Evtx,
         [Parameter(Mandatory = $False)][Switch]$User,
@@ -239,8 +243,10 @@ function Invoke-LiveResponse
     $Mft = $PSBoundParameters.ContainsKey('Mft')
     $Usnj = $PSBoundParameters.ContainsKey('Usnj')
     $Pf = $PSBoundParameters.ContainsKey('Pf')
+    $Pf = $PSBoundParameters.ContainsKey('Execution')
     $Reg = $PSBoundParameters.ContainsKey('Reg')
     $User = $PSBoundParameters.ContainsKey('User')
+    $Custom = $PSBoundParameters.ContainsKey('Custom')
 
     # Live Response
     $LR = $PSBoundParameters.ContainsKey('LR')
@@ -274,7 +280,7 @@ function Invoke-LiveResponse
         }
     }
     
-    If ($Raw -Or $Copy -Or $Mft -Or $Usnj -Or $Pf -Or $Reg -Or $Evtx -Or $User -Or $Disk -Or $Mem -Or $All -Or $Custom){
+    If ($Raw -Or $Copy -Or $Mft -Or $Usnj -Or $Pf -Or $Execution -Or $Reg -Or $Evtx -Or $User -Or $Disk -Or $Mem -Or $All -Or $Custom){
         $ForensicCopy = $True
 		If (!$LocalOut) {
 			If (!$Map){$Map = $True}
@@ -390,6 +396,13 @@ function Invoke-LiveResponse
         $sbPf = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\sbPrefetch.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPf.ToString())
         $ForensicCopyText = $ForensicCopyText + "`t`tPrefetch files`n"
+    }
+
+    # Execution
+    If ($Execution -Or $All){
+        $sbExecution = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\sbExecution.ps1" -raw))
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbExecution.ToString())
+        $ForensicCopyText = $ForensicCopyText + "`t`tEvidence of Execution`n"
     }
 
     # Registry Hive collection
