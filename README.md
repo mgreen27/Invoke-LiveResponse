@@ -27,4 +27,4 @@ Help: Get-Help Invoke-LiveResponse -detailed
 
 
 ###### One liner install (if you trust me...)
-PS> $url="https://raw.githubusercontent.com/mgreen27/Powershell-IR/master/Content/Ancilaries/Get-Forensicating.ps1";[Net.ServicePointManager]::SecurityProtocol = "tls12, tls11, tls";$WebClient=(New-Object System.Net.WebClient);$WebClient.Proxy=[System.Net.WebRequest]::GetSystemWebProxy();$WebClient.Proxy.Credentials=[System.Net.CredentialCache]::DefaultNetworkCredentials;Invoke-Expression $WebClient.DownloadString($url)
+PS> $url="https://raw.githubusercontent.com/mgreen27/Powershell-IR/master/Content/Ancillaries/Get-Forensicating.ps1";[Net.ServicePointManager]::SecurityProtocol = "tls12, tls11, tls";$WebClient=(New-Object System.Net.WebClient);$WebClient.Proxy=[System.Net.WebRequest]::GetSystemWebProxy();$WebClient.Proxy.Credentials=[System.Net.CredentialCache]::DefaultNetworkCredentials;Invoke-Expression $WebClient.DownloadString($url)
