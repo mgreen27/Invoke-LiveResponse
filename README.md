@@ -13,6 +13,11 @@ The current scope of [Invoke-LiveResponse](https://mgreen27.github.io/posts/2018
 * Results consist of the standard out from the executed content, redirected from the collection machine to a local Results folder as ScriptName.txt.
 * The benefit of this method is the ability to operationalise new capability easily by dropping in new content with desired StdOut.
 
+#### Can be run:
+* Over WinRM (original use)
+* Locally by leveraging the -WriteSctiptBlock -LocalOut:$True switches to build a local collection script.
+
+
 ### Installation
 1) Download Powershell-IR and rename to Invoke-LiveResponse into Powershell profile.
 
