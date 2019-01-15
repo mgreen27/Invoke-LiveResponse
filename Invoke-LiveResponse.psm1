@@ -445,13 +445,21 @@ function Invoke-LiveResponse
 
     #  Custom collection of scriptblocks added to ..\scriptblock\custom folder
     If ($Custom) {
-        #Foreach ($script in (Get-ChildItem -Path "$PSScriptRoot\Content\Scriptblock" -Filter*.ps1).FullName) {
-        Foreach ($script in (Get-ChildItem -Path "$PSScriptRoot\Content\Scriptblock\Custom" -Filter "*.ps1").FullName) {
-            $sbCustom = [System.Management.Automation.ScriptBlock]::Create((get-content $script -raw))
-            $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbCustom.ToString())
+        $Custom = (Get-ChildItem -Path "$PSScriptRoot\Content\Scriptblock\Custom" -Filter "*.ps1" -ErrorAction SilentlyContinue)
+        if ($Custom) {
+            Foreach ($script in $Custom) {
+                $sbCustom = [System.Management.Automation.ScriptBlock]::Create((get-content $script -raw))
+                $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbCustom.ToString())
 
-            $ForensicCopyText = $ForensicCopyText + "`t`tCustom " + (split-path $script -Leaf) + "`n"
+                $ForensicCopyText = $ForensicCopyText + "`t`tCustom " + (split-path $script -Leaf) + "`n"
+            }
         }
+        Else {
+            Write-Host -ForegroundColor White "`nInvoke-LiveResponse: -Custom content not found."
+            Write-Host "Check $PSScriptRoot\Content\Scriptblock\Custom`n"
+            break
+        }
+
     }
 
     # View ForensicCopy collected files

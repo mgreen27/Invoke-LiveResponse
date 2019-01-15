@@ -16,15 +16,16 @@ The current scope of [Invoke-LiveResponse](https://mgreen27.github.io/posts/2018
 #### Can be run:
 * Over WinRM (original use)
 * Locally by leveraging the -WriteSctiptBlock -LocalOut:$True switches to build a local collection script.
+* Invoke-LiveResponse supports Powershell 2.0 targets and above (excluding custom content)
 
 
 ### Installation
-1) Download Powershell-IR and rename to Invoke-LiveResponse into Powershell profile.
+Download Invoke-LiveResponse and extract into Powershell profile.
 
-To run: Import-Module Invoke-LiveResponse
+To run: `Import-Module Invoke-LiveResponse`
 
-Help: Get-Help Invoke-LiveResponse -detailed
+Help: `Get-Help Invoke-LiveResponse -detailed`
 
 
 ###### One liner install (if you trust me...)
-PS> $url="https://raw.githubusercontent.com/mgreen27/Powershell-IR/master/Content/Ancillaries/Get-Forensicating.ps1";[Net.ServicePointManager]::SecurityProtocol = "tls12, tls11, tls";$WebClient=(New-Object System.Net.WebClient);$WebClient.Proxy=[System.Net.WebRequest]::GetSystemWebProxy();$WebClient.Proxy.Credentials=[System.Net.CredentialCache]::DefaultNetworkCredentials;Invoke-Expression $WebClient.DownloadString($url)
+PS> `$url="https://raw.githubusercontent.com/mgreen27/Invoke-LiveResponse/master/Content/Ancillaries/Get-Forensicating.ps1";[Net.ServicePointManager]::SecurityProtocol = "tls12, tls11, tls";$WebClient=(New-Object System.Net.WebClient);$WebClient.Proxy=[System.Net.WebRequest]::GetSystemWebProxy();$WebClient.Proxy.Credentials=[System.Net.CredentialCache]::DefaultNetworkCredentials;Invoke-Expression $WebClient.DownloadString($url)`

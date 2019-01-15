@@ -3,7 +3,7 @@
     A script to download and install Invoke-LiveResponse in users Powershell profile
 
     Name: Get-Forensicating.ps1
-    Version: 1.2
+    Version: 1.3
 
 .DESCRIPTION
     Remove old versions of Invoke-LiveResponse if exist.
@@ -23,7 +23,7 @@
     Set-ExecutionPolicy -ExecutionPolicy Bypass; .\Get-Forensicating.ps1
 .LINK
     https://github.com/Invoke-IR/PowerForensics
-    https://github.com/mgreen27/Powershell-IR
+    https://github.com/mgreen27/Invoke-LiveResponse
 
 .NOTES
     
@@ -62,7 +62,7 @@ Try{
     $WebClient=(New-Object System.Net.WebClient)
     $WebClient.Proxy=[System.Net.WebRequest]::GetSystemWebProxy()
     $WebClient.Proxy.Credentials=[System.Net.CredentialCache]::DefaultNetworkCredentials
-    $WebClient.DownloadFile("https://github.com/mgreen27/Powershell-IR/archive/master.zip","$Target\invoke-ir.zip")
+    $WebClient.DownloadFile("https://github.com/mgreen27/Invoke-LiveResponse/archive/master.zip","$Target\Invoke-LiveResponse.zip")
     Write-Host -ForegroundColor Red "DONE"
 }
 Catch{
@@ -73,12 +73,12 @@ Catch{
 # Extract Invoke-Live Response
 Try{
     Write-Host -ForegroundColor Yellow "`nExtracting Invoke-LiveResponse... " -NoNewline
-    unblock-file -Path "$Target\invoke-ir.zip"
+    unblock-file -Path "$Target\Invoke-LiveResponse.zip"
 
-    Expand-ZIPFile –File "$target\invoke-ir.zip" –Destination $target
+    Expand-ZIPFile –File "$target\Invoke-LiveResponse.zip" –Destination $target
     Write-Host -ForegroundColor Red "DONE`n"
 
-    Move-Item ($Target + "\Powershell-IR-master") ($Target + "\Invoke-LiveResponse") -Force
+    Move-Item ($Target + "\Invoke-LiveResponse-master") ($Target + "\Invoke-LiveResponse") -Force
     Remove-Item -Path "$Target\invoke-ir.zip" -Force
 }
 Catch{
