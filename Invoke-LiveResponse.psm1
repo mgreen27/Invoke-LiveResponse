@@ -5,7 +5,7 @@ function Invoke-LiveResponse
     A Module for Live Response and Forensic collections. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.91
+    Version: 0.92
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
@@ -25,6 +25,7 @@ function Invoke-LiveResponse
     Both Forensic Collection and Liveresponse modes can be run:
     - Over WinRM (original use)
     - Locally by leveraging the -WriteSctiptBlock -LocalOut:$True switches
+    - Invoke-LiveResponse supports Powershell 2.0 targets and above (excluding custom content)
 
 
 .PARAMETER ComputerName
@@ -54,10 +55,10 @@ function Invoke-LiveResponse
     e.g T:
 
 .PARAMETER UNC
-    Specifies the Net use UNC Path and share credentials for Forensic Collection Mode.
+    Specifies the UNC Path and share credentials for Forensic Collection Mode.
     e.g     -UNC "\\<UNC>\<Share>"
-    or      -UNC "\\<UNC>\<Share> /user:<domain>\<shareuser> <sharepassword>"
-            Quotes required for long command. Input is validated.
+    or      -UNC "\\<UNC>\<Share>,<domain>\<shareuser>,<sharepassword>"
+            Quotes required and input is validated. For no password or bad format, input validation will rerequest details.
 
 .PARAMETER LocalOut
     Two use cases:
@@ -240,10 +241,10 @@ function Invoke-LiveResponse
     $Mem = $PSBoundParameters.ContainsKey('Mem')
     $Disk = $PSBoundParameters.ContainsKey('Disk')
     $Evtx = $PSBoundParameters.ContainsKey('Evtx')
+    $Execution = $PSBoundParameters.ContainsKey('Execution')
     $Mft = $PSBoundParameters.ContainsKey('Mft')
     $Usnj = $PSBoundParameters.ContainsKey('Usnj')
     $Pf = $PSBoundParameters.ContainsKey('Pf')
-    $Pf = $PSBoundParameters.ContainsKey('Execution')
     $Reg = $PSBoundParameters.ContainsKey('Reg')
     $User = $PSBoundParameters.ContainsKey('User')
     $Custom = $PSBoundParameters.ContainsKey('Custom')
@@ -283,9 +284,7 @@ function Invoke-LiveResponse
     If ($Raw -Or $Copy -Or $Mft -Or $Usnj -Or $Pf -Or $Execution -Or $Reg -Or $Evtx -Or $User -Or $Disk -Or $Mem -Or $All -Or $Custom){
         $ForensicCopy = $True
 		If (!$LocalOut) {
-			If (!$Map){$Map = $True}
 			If (!$UNC){$UNC = $True}
-			$Map = Invoke-InputValidation -Map $Map
 			$UNC = Invoke-InputValidation -UNC $UNC
 		}
 		Else {
@@ -329,23 +328,21 @@ function Invoke-LiveResponse
     # Start output string
     $ForensicCopyText = "`tForensicCopy Items:`n"
 
+
     # CPU Priority - will be included in all Invoke-Liveresponse Scriptblocks
     $sbPriority = [ScriptBlock]::Create("`$Process = Get-Process -Id `$Pid`n`$Process.PriorityClass = 'IDLE'`n")
 
-    # Path configuration  - will be included in all ForensicCopy sessions
-    $sbPath = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPath.ps1" -raw))
 
+    # Path configuration  - will be included in all ForensicCopy and -LocalOut:$true sessions
     if ($LocalOut -ne $True) {
-        $sbPath2 =  [ScriptBlock]::Create("`ncmd /c net use $Map $UNC > null 2>&1`n`n")
-        $sbPath3 =  [ScriptBlock]::Create("If (!(Test-Path $Map)) {Write-Host -ForegroundColor Red `"Error: Check UNC path and credentials. Unable to Map $Map`";break}`n")
-        $sbPath =  [ScriptBlock]::Create("`n`$Map = '$Map'" + $sbpath2.toString() + $sbpath3.toString() + $sbpath.toString())
+        $sbPath = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPathUnc.ps1" -raw))
+        $sbPath = [ScriptBlock]::Create("`n`$Unc = `"$Unc`"`n" + $sbPath.ToString())
     }
     Else {
-        $sbPath =  [ScriptBlock]::Create("`n`$Map = `$((Get-Location).Path)`n" + $sbpath.toString())
+        $sbPath = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPathLocal.ps1" -raw))
     }
-        
-    $Scriptblock = [ScriptBlock]::Create($sbPriority.ToString() + $sbPath.ToString())
 
+    $Scriptblock = [ScriptBlock]::Create($sbPriority.ToString() + $sbPath.ToString())
 
     # MemoryDump
     If ($Mem -Or $All) { 
@@ -356,8 +353,7 @@ function Invoke-LiveResponse
 
 
     # PowerForensics - reflectively loads PF if Raw collection configured
-
-    If ($Raw -Or $Mft -Or $Usnj -Or $Evtx -Or $Reg -Or $User -Or $Disk -Or $All -Or $Custom){
+    If ($Raw -Or $Mft -Or $Usnj -Or $Evtx -Or $Execution -Or $Reg -Or $User -Or $Disk -Or $All -Or $Custom){
         $sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPowerForensics.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPowerForensics.ToString())
         $PowerForensics = $True
@@ -419,7 +415,7 @@ function Invoke-LiveResponse
         $ForensicCopyText = $ForensicCopyText + "`t`tWindows Event Logs`n"
     }
 
-    # User artefact collection, currently user hives only
+    # User artefact collection
     If ($User -Or $All){
         $sbUser = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\sbUser.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbUser.ToString())
@@ -464,8 +460,7 @@ function Invoke-LiveResponse
 
     # Unmap share
     if (!$LocalOut) {
-		$sbUnMap = [ScriptBlock]::Create("`nnet use " + $Map + " /DELETE /Y | Out-Null`n")	
-		$Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbUnMap.ToString())
+        $ScriptBlock = [ScriptBlock]::Create($Scriptblock.ToString() + "`n`n`$net.RemoveNetworkDrive(`$Map,`$true,`$true)`n")
 	}
 
 
@@ -533,8 +528,8 @@ function Invoke-LiveResponse
 
         If($ForensicCopy) {
             Write-Host -ForegroundColor Cyan "`nStarting ForensicCopy over WinRM..."
-            Write-Host "`tUNC Path: " $UNC.split()[0]
-            Write-Host "`tAs $Map\$date`Z_$Target`n"
+            Write-Host "`tUNC Path: " $UNC.split(',')[0]
+            Write-Host "`tTo .\$date`Z_$Target`n"
             Write-Host $ForensicCopyText
 
             # Execute collated scriptblock
@@ -625,30 +620,17 @@ function Invoke-InputValidation
         [Parameter(Mandatory = $False)][Switch]$Credential
         )
 
-    If ($Map) {
-        while ($Map -notmatch "^[a-zA-Z]\:$") {
-            Clear-Host
-            Write-Host -ForegroundColor Cyan "`nInvoke-LiveResponse`n"
-            Write-Host -ForegroundColor Yellow "Input validation ForensicCopy -Map"
-            Write-Host "Enter Drive letter to map on $Computername with `":`""
-            Write-Host "e.g T:"
-            $Map = Read-Host -Prompt "Drive Letter" 
-        }
-        Clear-Host
-        return $Map
-    }
-
     If ($UNC) {
-        while ($UNC.split()[0] -notmatch "\\\\(\w+|\b(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\b)\\\w+"`
-            -or $UNC.split()[1] -notmatch "(\/user\:[a-zA-Z][a-zA-Z0-9\-\.]{0,61}[a-zA-Z]\\\w[\w\.\- ]*)?"`
-            -or $UNC.split()[2] -notmatch "(\w+)?" -or !($Map.split().Length -eq 1 -or 3)){
+        while ($UNC.split(',')[0] -notmatch "\\\\(\w+|\b(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\b)\\\w+"`
+            -or $UNC.split(',')[1] -notmatch "([a-zA-Z][a-zA-Z0-9\-\.]{0,61}[a-zA-Z]\\\w[\w\.\- ]*)?"`
+            -or $UNC.split(',')[2] -notmatch "(\w+)?" -or !($Map.split(',').Length -eq 1 -or 3)){
             Clear-Host
             Write-Host -ForegroundColor Cyan "`nInvoke-LiveResponse`n"
             Write-Host -ForegroundColor Yellow "Input validation ForensicCopy -UNC"
             Write-Host "Enter UNC path and credentials required to run Net Use command on $ComputerName"
-            Write-Host "e.g`t\\<Servername or IP>\Share /user:<domain>\<username> <password>"
+            Write-Host "e.g`t\\<Servername or IP>\Share,<domain>\<username>,<password>"
             Write-Host "or `t\\<Servername or IP>\Share"
-            $UNC = Read-Host -Prompt "Net Use UNC Path"
+            $UNC = Read-Host -Prompt "UNC path and credentials"
         }
         Clear-Host
         return $UNC            

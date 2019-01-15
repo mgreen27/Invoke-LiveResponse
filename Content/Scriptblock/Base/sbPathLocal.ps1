@@ -1,4 +1,5 @@
 ﻿
+$Map = $((Get-Location).Path)
 $Date = $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd)
 $Output = $Map + "\" + $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd) + "Z_" + $env:computername
 
