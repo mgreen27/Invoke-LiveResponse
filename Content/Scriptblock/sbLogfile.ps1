@@ -1,9 +1,9 @@
 ﻿
 # $Logfile collection
-If (! (Test-Path "$Output\Disk")) {
-    New-Item ($Output + "\Disk") -type directory | Out-Null
-}
-
 Write-Host -ForegroundColor Yellow "`tCollecting `$LogFile"
-try{Invoke-ForensicCopy -InFile "$env:systemdrive\`$LogFile" -OutFile ($Output + "\Disk\`$LogFile")}
+$Out = "$Output\" + $env:systemdrive.TrimEnd(':')
+If (! (Test-Path $Out)){
+     New-Item ($Out) -type directory | Out-Null
+}
+try{Invoke-ForensicCopy -InFile "$env:systemdrive\`$LogFile" -OutFile ("$Out\`$LogFile")}
 Catch{Write-Host "`tError: `$LogFile raw copy."} 

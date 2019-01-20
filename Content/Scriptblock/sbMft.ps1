@@ -1,8 +1,10 @@
 ﻿
 # $MFT collection
-If (! (Test-Path "$Output\Disk")){
-    New-Item ($Output + "\Disk") -type directory | Out-Null
-}
 Write-Host -ForegroundColor Yellow "`tCollecting `$MFT"
-try{Invoke-ForensicCopy -InFile "$env:systemdrive\`$MFT" -OutFile ($Output + "\Disk\`$MFT")}
+$Out = "$Output\" + $env:systemdrive.TrimEnd(':')
+If (! (Test-Path $Out)){
+     New-Item ($Out) -type directory | Out-Null
+}
+
+try{Invoke-ForensicCopy -InFile "$env:systemdrive\`$MFT" -OutFile ("$Out\`$MFT")}
 Catch{Write-Host "`tError: `$MFT raw copy."}

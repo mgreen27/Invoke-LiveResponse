@@ -3,11 +3,12 @@
 Write-Host -ForegroundColor Yellow "`tCollecting User Artefacts"
                        
 $Users = Get-ChildItem "$env:systemdrive\Users\" -Force | where-object {$_.PSIsContainer} | Where-object {
-$_.Name -ne "Public" -And $_.Name -ne "All Users" -And $_.Name -ne "DEfault" -And $_.Name -ne "Default User"} | select-object -ExpandProperty name
+$_.Name -ne "Public" -And $_.Name -ne "All Users" -And $_.Name -ne "Default" -And $_.Name -ne "Default User"} | select-object -ExpandProperty name
 
 Foreach ($User in $Users) {
     $profile = "$env:systemdrive\Users\$User"
-    $out = "$Output\User\$user"
+    $Out = "$Output\" + $env:systemdrive.TrimEnd(':') + "\Users\$user"
+
 
     # User hives
     Invoke-BulkCopy -path $profile -dest $out -filter "ntuser.dat" -forensic
