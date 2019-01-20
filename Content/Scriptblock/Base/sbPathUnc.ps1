@@ -16,7 +16,9 @@ $net = (new-object -ComObject WScript.Network)
 
 
 Try {
-    if ($net.EnumNetworkDrives($Map)) { $net.RemoveNetworkDrive($Map,$true,$true) }
+    if (test-path $Map) {
+        If ($net.EnumNetworkDrives($Map)) { $net.RemoveNetworkDrive($Map,$true,$true) }
+    }
 
     if ($Unc.count -eq 3) { $net.MapNetworkDrive($Map, $UNC[0],'FALSE',$UNC[1], $UNC[2]) }
     Elseif ($Unc.count -eq 1) { $net.MapNetworkDrive($Map, $UNC[0],'FALSE') }
@@ -27,13 +29,16 @@ Try {
     }
 }
 Catch {
-    if ($net.EnumNetworkDrives($Map)) { $net.RemoveNetworkDrive($Map,$true,$true) }
+    if (test-path $Map) {
+        If ($net.EnumNetworkDrives($Map)) { $net.RemoveNetworkDrive($Map,$true,$true) }
+    }
     Write-Host -ForegroundColor Red "`tError: Check UNC path and credentials. Unable to Map $Map"
     break
 }
 
 
 $Output = $Map + "\" + $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd) + "Z_" + $env:computername
+
 
 # if previous collection found. Remove.
 If (Test-Path $Output -ErrorAction SilentlyContinue){

@@ -5,7 +5,7 @@ function Invoke-LiveResponse
     A Module for Live Response and Forensic collections. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.92
+    Version: 0.95
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
@@ -127,6 +127,10 @@ function Invoke-LiveResponse
     Optional Forensic Copy Mode parameter to select collection of User artefacts and registry hive files 
     Currently includes ntuser.dat and UsrClass.dat
 
+.PARAMETER Vss
+    Optional parameter to select collection of Volume ShadowCopy Service artefacts for selected collections. 
+    Currently mounts via symlink so some small forensic cost to consider. 
+
 .PARAMETER LR
     An optional parameter to select Live Response mode. LiveResponse mode will execute any Powershell scripts placed inside a content folder and output to a Results folder on the collector machine.
     
@@ -225,6 +229,7 @@ function Invoke-LiveResponse
         [Parameter(Mandatory = $False)][Switch]$Reg,
         [Parameter(Mandatory = $False)][Switch]$Evtx,
         [Parameter(Mandatory = $False)][Switch]$User,
+        [Parameter(Mandatory = $False)][Switch]$Vss,
         [Parameter(Mandatory = $False)][Switch]$LR,
         [Parameter(Mandatory = $False)][String]$Content,
         [Parameter(Mandatory = $False)][String]$Results,
@@ -248,6 +253,8 @@ function Invoke-LiveResponse
     $Reg = $PSBoundParameters.ContainsKey('Reg')
     $User = $PSBoundParameters.ContainsKey('User')
     $Custom = $PSBoundParameters.ContainsKey('Custom')
+
+    $Vss = $PSBoundParameters.ContainsKey('Vss')
 
     # Live Response
     $LR = $PSBoundParameters.ContainsKey('LR')
@@ -330,7 +337,7 @@ function Invoke-LiveResponse
 
 
     # CPU Priority - will be included in all Invoke-Liveresponse Scriptblocks
-    $sbPriority = [ScriptBlock]::Create("`$Process = Get-Process -Id `$Pid`n`$Process.PriorityClass = 'IDLE'`n")
+    $sbStart = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbStart.ps1" -raw))
 
 
     # Path configuration  - will be included in all ForensicCopy and -LocalOut:$true sessions
@@ -342,7 +349,7 @@ function Invoke-LiveResponse
         $sbPath = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPathLocal.ps1" -raw))
     }
 
-    $Scriptblock = [ScriptBlock]::Create($sbPriority.ToString() + $sbPath.ToString())
+    $Scriptblock = [ScriptBlock]::Create($sbStart.ToString() + $sbPath.ToString())
 
     # MemoryDump
     If ($Mem -Or $All) { 
@@ -364,6 +371,13 @@ function Invoke-LiveResponse
     If ($ForensicCopy -Or $Pf -Or $Copy){
         $sbBulkCopy = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbBulkCopy.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbBulkCopy.ToString())
+    }
+
+    # Add Volume Shadow Copy for VSC collection usecases
+    If ($Vss){
+        $sbVssMount = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbVssMount.ps1" -raw))
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbVssMount.ToString())
+        $ForensicCopyText = $ForensicCopyText + "`t`t`Volume Shadow Copy (if availible)`n"
     }
 
     # $MFT collection
@@ -391,7 +405,7 @@ function Invoke-LiveResponse
     If ($Pf -Or $All){
         $sbPf = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\sbPrefetch.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPf.ToString())
-        $ForensicCopyText = $ForensicCopyText + "`t`tPrefetch files`n"
+        $ForensicCopyText = $ForensicCopyText + "`t`tPrefetch files (if availible)`n"
     }
 
     # Execution
@@ -445,9 +459,9 @@ function Invoke-LiveResponse
 
     #  Custom collection of scriptblocks added to ..\scriptblock\custom folder
     If ($Custom) {
-        $Custom = (Get-ChildItem -Path "$PSScriptRoot\Content\Scriptblock\Custom" -Filter "*.ps1" -ErrorAction SilentlyContinue)
-        if ($Custom) {
-            Foreach ($script in $Custom) {
+        $CustomContent = (Get-ChildItem -Path "$PSScriptRoot\Content\Scriptblock\Custom" -Filter "*.ps1").FullName
+        if ($CustomContent) {
+            Foreach ($script in $CustomContent) {
                 $sbCustom = [System.Management.Automation.ScriptBlock]::Create((get-content $script -raw))
                 $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbCustom.ToString())
 
@@ -460,6 +474,12 @@ function Invoke-LiveResponse
             break
         }
 
+    }
+
+    # Unmount Volume Shadow Copy
+    if ($Vss) {
+        $sbVssUnmount = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbVssUnmount.ps1" -raw))
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbVssUnmount.ToString())
     }
 
     # View ForensicCopy collected files
@@ -480,7 +500,7 @@ function Invoke-LiveResponse
         $LocalScriptBlock = [ScriptBlock]::Create("Write-Host -ForegroundColor Cyan `"Starting Invoke-LiveResponse.`"`nWrite-Host -ForegroundColor White `"``tLocal Mode.`"`n")
 
         if ($ForensicCopy) {
-            $LocalScriptBlock = [ScriptBlock]::Create($LocalScriptBlock.ToString() + "`nWrite-Host -ForegroundColor Cyan `"Starting ForensicCopy.`"`n" + "`n" + $ScriptBlock.ToString())
+            $LocalScriptBlock = [ScriptBlock]::Create($LocalScriptBlock.ToString() + "Write-Host -ForegroundColor Cyan `"Starting ForensicCopy.`"`n" + "`n" + $ScriptBlock.ToString())
         }
 
         if ($LR) {
@@ -488,6 +508,12 @@ function Invoke-LiveResponse
             $LocalScriptblock = [ScriptBlock]::Create($LocalScriptblock.ToString() + "`n" + $sbLocalLiveResponse.ToString())
         }
 		$LocalScriptblock | Out-String -Width 4096 | Out-File "$(Get-Location)\$($date)_Invoke-LiveResponse.ps1"
+        
+        Clear-Host
+        Write-host -ForegroundColor Cyan "`nInvoke-LiveResponse"
+        Write-Host -ForegroundColor White "`n`tWriteScriptblock: " -NoNewline
+        Write-Host -ForegroundColor White "$(Get-Location)\$($date)_Invoke-LiveResponse.ps1`n"
+
 	}
     # WinRM execution
     else {
