@@ -3,9 +3,9 @@ The current TODO list of Invoke-LiveResponse.
 
 ### ForensicCopy Mode
 * Add artefacts for various usecases.
-* Add VSS feature.
 * Add sftp output feature.
 
 ### LiveResponse Mode
 * Clean up content and add Powershell version compatibility information.
+* Standardise output for ingestion to data plafform
 * Continue to maintain/add content

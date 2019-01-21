@@ -1,6 +1,10 @@
 ﻿
-# Memory dump winpmem
-$MemDumpTool = ((get-item $Output).parent.fullname).trimEnd("\") + "\winpmem-2.1.post4.exe"
+# Memory dump winpmem find latest version in folder
+$ToolFolder = ((get-item $Output).parent).fullname.trimEnd("\")
+$MemDumpTool = $(Get-ChildItem -Path $ToolFolder -Filter "winpmem*"| Sort-Object PSChildName -Descending)
+
+If ($MemDumpTool.count -gt 1) { $MemDumpTool = $ToolFolder + "\" + $MemDumpTool[0] }
+Else { $MemDumpTool = $ToolFolder + "\" + $MemDumpTool }
 
 If (Test-Path $MemDumpTool) {
     try{
@@ -15,5 +19,5 @@ If (Test-Path $MemDumpTool) {
     }
 }
 Else{
-    Write-Host -ForegroundColor Red "`tError: $MemDumpTool not found at UNC path. See help for download details."
+    Write-Host -ForegroundColor Red "`tError: $MemDumpTool not found at path. See help for download details."
 }

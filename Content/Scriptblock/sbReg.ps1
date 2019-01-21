@@ -10,5 +10,5 @@ Invoke-BulkCopy -path "$env:systemdrive\Windows\System32\config" -dest "$Out\Win
 Invoke-BulkCopy -path "$env:systemdrive\Windows\System32\config" -dest "$Out\Windows\System32\Config" -filter "SYSTEM" -forensic
 
 # System and serice profile hives
-Invoke-BulkCopy -path "$env:systemdrive\Windows\system32\config\systemprofile" -dest  + "\Windows\System32\Config\SystemProfile" -filter "ntuser.dat" -forensic
-Invoke-BulkCopy -path "$env:systemdrive\Windows\ServiceProfiles" -dest "$Ou\Windows\ServiceProfiles" -filter "ntuser.dat" -recurse -forensic
+Invoke-BulkCopy -path "$env:systemdrive\Windows\system32\config\systemprofile" -dest  + "$Out\Windows\System32\Config\SystemProfile" -filter "ntuser.dat" -forensic
+Invoke-BulkCopy -path "$env:systemdrive\Windows\ServiceProfiles" -dest "$Out\Windows\ServiceProfiles" -filter "ntuser.dat" -recurse -forensic

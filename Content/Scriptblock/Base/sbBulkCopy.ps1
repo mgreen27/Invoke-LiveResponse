@@ -59,12 +59,13 @@ function Invoke-BulkCopy{
     }
     Else { $PathTable[$PathTable.count] = @($Path,$Dest,$False) }
 
+
     Foreach ($Entry in $PathTable.getEnumerator() | Sort Key) {
 
         $Path = $Entry.Value[0]
         $Dest = $Entry.Value[1]
         $VssFlag = $Entry.Value[2]
-        
+
         # Test for path and Get applicable files and folders for copy
         if(test-path -path $path){
             if ($recurse) {
@@ -312,7 +313,8 @@ function Invoke-BulkCopy{
                                 Write-Host "Info:"$item.value[0]"fell back to Raw copy."
                             }
                             Catch {
-                                Write-Host "Error:"$item.value[0]"copy."
+                                if ( $Item.Value[0] -match "\\vss[0-9]\\" ) { Write-Host "Error:"$Item.Value[0].TrimStart($env:temp) "copy." }
+                                Else { Write-Host "Error:"$item.value[0]"copy." }
                             } 
                         }
                     }
