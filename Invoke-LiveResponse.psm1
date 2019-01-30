@@ -367,17 +367,17 @@ function Invoke-LiveResponse
         }
 
 
-    # Add Invoke-BulkCopy for bulk copy usecases
+    # Add Copy-LiveResponse for ForensicCopy mode copy usecases
     If ($ForensicCopy -Or $Pf -Or $Copy){
-        $sbBulkCopy = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbBulkCopy.ps1" -raw))
-        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbBulkCopy.ToString())
+        $sbCopyLiveResponse = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbCopyLiveResponse.ps1" -raw))
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbCopyLiveResponse.ToString())
     }
 
     # Add Volume Shadow Copy for VSC collection usecases
     If ($Vss){
         $sbVssMount = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbVssMount.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbVssMount.ToString())
-        $ForensicCopyText = $ForensicCopyText + "`t`t`Volume Shadow Copy (if availible)`n"
+        $ForensicCopyText = $ForensicCopyText + "`t`t`Volume Shadow Copy`n"
     }
 
     # $MFT collection
@@ -405,7 +405,7 @@ function Invoke-LiveResponse
     If ($Pf -Or $All){
         $sbPf = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\sbPrefetch.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPf.ToString())
-        $ForensicCopyText = $ForensicCopyText + "`t`tPrefetch files (if availible)`n"
+        $ForensicCopyText = $ForensicCopyText + "`t`tPrefetch files`n"
     }
 
     # Execution

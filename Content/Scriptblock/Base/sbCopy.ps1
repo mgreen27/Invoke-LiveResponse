@@ -15,7 +15,7 @@ Foreach($Item in $CopyArray) {
                 $Target = (Split-Path $Item -NoQualifier).Trim("\")
                 $Drive = (split-path $Item -Qualifier).TrimEnd(":")
 
-                Invoke-BulkCopy -path $Folder -dest "$Output\Files\$Drive\$Target"
+                Copy-LiveResponse -path $Folder -dest "$Output\Files\$Drive\$Target"
             }
         }
         # Copy file
@@ -25,7 +25,7 @@ Foreach($Item in $CopyArray) {
             $Target = (Split-path (Split-Path $Item -NoQualifier)).TrimStart("\")
             $Drive = (split-path $Item -Qualifier).TrimEnd(":")
         
-            Invoke-BulkCopy -path $Folder -dest "$Output\Files\$Drive\$Target" -filter $File
+            Copy-LiveResponse -path $Folder -dest "$Output\Files\$Drive\$Target" -filter $File
         }
     }
     Else {

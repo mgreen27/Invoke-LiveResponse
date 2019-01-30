@@ -2,7 +2,7 @@
 The current TODO list of Invoke-LiveResponse.
 
 ### ForensicCopy Mode
-* Add artefacts for various usecases.
+* Refine artefacts for additional usecases.
 * Add sftp output feature.
 
 ### LiveResponse Mode
