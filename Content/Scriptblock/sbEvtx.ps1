@@ -9,4 +9,6 @@ Copy-LiveResponse -path "$env:systemdrive\Windows\System32\winevt\Logs" -dest "$
 Copy-LiveResponse -path "$env:systemdrive\Windows\System32\winevt\Logs" -dest "$Out\Windows\System32\winevt\Logs" -filter "Application.evtx" -forensic
 Copy-LiveResponse -path "$env:systemdrive\Windows\System32\winevt\Logs" -dest "$Out\Windows\System32\winevt\Logs" -filter "Microsoft-Windows-Sysmon%4Operational.evtx" -forensic
 Copy-LiveResponse -path "$env:systemdrive\Windows\System32\winevt\Logs" -dest "$Out\Windows\System32\winevt\Logs" -filter "Microsoft-Windows-Powershell%4Operational.evtx" -forensic
+Copy-LiveResponse -path "$env:systemdrive\Windows\System32\winevt\Logs" -dest "$Out\Windows\System32\winevt\Logs" -filter "Microsoft-Windows-TerminalServices-RemoteConnectionManager%4Operational.evtx" -forensic
+Copy-LiveResponse -path "$env:systemdrive\Windows\System32\winevt\Logs" -dest "$Out\Windows\System32\winevt\Logs" -filter "Microsoft-Windows-TerminalServices-LocalSessionManager%4Operational.evtx" -forensic
 Copy-LiveResponse -path "$env:systemdrive\Windows\System32\winevt\Logs" -dest "$Out\Windows\System32\winevt\Logs" -filter "Microsoft-Windows-Bits-Client%4Operational.evtx" -forensic
