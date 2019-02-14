@@ -10,7 +10,7 @@ The current scope of [Invoke-LiveResponse](https://mgreen27.github.io/posts/2018
 
 ### Live Response
 * Inspired by the Kansa Framework, LiveResponse mode will execute any Powershell scripts placed inside a content folder.
-* Results consist of the standard out from the executed content, redirected from the collection machine to a local Results folder as ScriptName.txt.
+* Results consist of the standard out from the executed content.
 * The benefit of this method is the ability to operationalise new capability easily by dropping in new content with desired StdOut.
 
 #### Can be run:

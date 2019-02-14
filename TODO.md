@@ -1,7 +1,10 @@
 # Invoke-LiveResponse
 The current TODO list of Invoke-LiveResponse.
 
+### Invoke-LiveResponse wiki
+
 ### ForensicCopy Mode
+* Add noBase64 option for reflection to bypass EDR
 * Refine artefacts for additional usecases.
 * Add sftp output feature.
 
