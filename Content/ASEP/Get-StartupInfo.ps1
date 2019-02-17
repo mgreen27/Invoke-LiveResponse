@@ -2,14 +2,14 @@
 function Get-StartupInfo {
 <#
 .SYNOPSIS
-    Invoke-StartupInfor.ps1 parses StartupInfo entries.
+    Get-StartupInfor parses StartupInfo entries.
     
-    Name: Invoke-StartupInfo.ps1
+    Name: Get-StartupInfo
     Version: 0.1
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
-    StartupInfo has been included from Windows 10 <???> and is an altenate evidence source for ASEPs
+    StartupInfo has been included from Windows 10 <???> and is an altenate evidence source for ASEPs.
 
 .EXAMPLE
 	Get-StartupInfo
