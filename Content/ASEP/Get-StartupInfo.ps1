@@ -87,4 +87,19 @@ Param(
                 PID = $Entry.PID
                 ParentStartTime = $Entry.ParentStartTime
                 ParentProcess = $Entry.ParentName
-                PPID = $En
+                PPID = $Entry.ParentPID
+                CpuUsage = $Entry.CpuUsage.'#text'
+                DiskUsage = $Entry.DiskUsage.'#text'
+                StartedInSec = $Entry.StartedInTraceSec
+            }
+        
+            if($ReturnHashtables) { $Output }
+            else { New-Object PSObject -Property $Output }
+
+        }
+    
+
+    }
+}
+
+Get-StartupInfo
