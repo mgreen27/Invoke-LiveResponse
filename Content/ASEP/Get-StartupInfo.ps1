@@ -2,28 +2,29 @@
 function Get-StartupInfo {
 <#
 .SYNOPSIS
-    Get-StartupInfor parses StartupInfo entries.
+    Invoke-StartupInfor.ps1 parses StartupInfo entries.
     
-    Name: Get-StartupInfo
-    Version: 0.1
+    Name: Invoke-StartupInfo.ps1
+    Version: 0.11
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
-    StartupInfo has been included from Windows 10 <???> and is an altenate evidence source for ASEPs.
+    StartupInfo has been included in modern Windows and is an altenate evidence source for ASEPs.
+    StartupInfo is generated on successful startup execution.
 
 .EXAMPLE
 	Get-StartupInfo
 
-    DiskUsage       : 18711552
-    ParentStartTime : 2018/07/29:08:26:45.0319383
-    PPID            : 5536
-    StartedInSec    : 152.080
-    ProcessName     : C:\Devic
-    ParentProcess   : explorer.exe
-    CommandLine     : "C:\Program Files\VMware\VMware Tools\vmtoolsd.exe" -n vmusr
-    StartTime       : 2018/07/29:08:27:04.3440881
-    PID             : 7980
-    CpuUsage        : 4820232
+    DiskUsage         : 432128
+    ParentStartUtc    : 2019/02/18:01:20:30.8228799
+    Process           : C:\ProgramData\update\update.exe
+    PPID              : 2696
+    ParentProcess     : explorer.exe
+    CommandLine       : "C:\ProgramData\update\update.exe" /s /u /i:update.log scrob
+    CpuUsage          : 19686
+    PID               : 3548
+    StartedInTraceSec : 37.977
+    StartTimeUtc      : 2019/02/18:01:20:49.6184502
 
 
 .EXAMPLE
@@ -31,31 +32,20 @@ function Get-StartupInfo {
 
     Name                           Value                                                                                                                                                                                                                                                                                                                                                                  
     ----                           -----                                                                                                                                                                                                                                                                                                                                                                  
-    DiskUsage                      18711552                                                                                                                                                                                                                                                                                                                                                               
-    ParentStartTime                2018/07/29:08:26:45.0319383                                                                                                                                                                                                                                                                                                                                            
-    PPID                           5536                                                                                                                                                                                                                                                                                                                                                                   
-    StartedInSec                   152.080                                                                                                                                                                                                                                                                                                                                                                
-    ProcessName                    C:\Devic                                                                                                                                                                                                                                                                                                                                                               
-    ParentProcess                  explorer.exe                                                                                                                                                                                                                                                                                                                                                           
-    CommandLine                    "C:\Program Files\VMware\VMware Tools\vmtoolsd.exe" -n vmusr                                                                                                                                                                                                                                                                                                           
-    StartTime                      2018/07/29:08:27:04.3440881                                                                                                                                                                                                                                                                                                                                            
-    PID                            7980                                                                                                                                                                                                                                                                                                                                                                   
-    CpuUsage                       4820232             
+    DiskUsage                      432128                                                                                                                                                                                                           
+    ParentStartUtc                 2019/02/18:01:20:30.8228799                                                                                                                                                                                      
+    Process                        C:\ProgramData\update\update.exe                                                                                                                                                                                 
+    PPID                           2696                                                                                                                                                                                                             
+    ParentProcess                  explorer.exe                                                                                                                                                                                                     
+    CommandLine                    "C:\ProgramData\update\update.exe" /s /u /i:update.log scrob                                                                                                                                                     
+    CpuUsage                       19686                                                                                                                                                                                                            
+    PID                            3548                                                                                                                                                                                                             
+    StartedInTraceSec              37.977                                                                                                                                                                                                           
+    StartTimeUtc                   2019/02/18:01:20:49.6184502
 
 
 .EXAMPLE
 	Get-StartupInfo -path c:\cases\StartupInfo
-
-    DiskUsage       : 18711552
-    ParentStartTime : 2018/07/29:08:26:45.0319383
-    PPID            : 5536
-    StartedInSec    : 152.080
-    ProcessName     : C:\Devic
-    ParentProcess   : explorer.exe
-    CommandLine     : "C:\Program Files\VMware\VMware Tools\vmtoolsd.exe" -n vmusr
-    StartTime       : 2018/07/29:08:27:04.3440881
-    PID             : 7980
-    CpuUsage        : 4820232
 
 
 .NOTES
@@ -70,7 +60,7 @@ Param(
 
     Try { $StartupInfo = Get-ChildItem -Path $Path -Filter "*StartupInfo*.xml" -ErrorAction Stop | Select-Object -ExpandProperty FullName }
     Catch{
-        "Error Parsing StartupInfo. Check path or Windows Version"
+        "Error Parsing StartupInfo: Check path or Windows Version"
         exit
     }
 
@@ -81,16 +71,16 @@ Param(
         Foreach ($Entry in $Entries) { 
         
             $Output = @{
-                StartTime = $Entry.StartTime
-                ProcessName = $Entry.Name
+                StartTimeUtc = $Entry.StartTime
+                Process = $Entry.Name
                 CommandLine = $Entry.CommandLine.'#cdata-section'
                 PID = $Entry.PID
-                ParentStartTime = $Entry.ParentStartTime
+                ParentStartUtc = $Entry.ParentStartTime
                 ParentProcess = $Entry.ParentName
                 PPID = $Entry.ParentPID
                 CpuUsage = $Entry.CpuUsage.'#text'
                 DiskUsage = $Entry.DiskUsage.'#text'
-                StartedInSec = $Entry.StartedInTraceSec
+                StartedInTraceSec = $Entry.StartedInTraceSec
             }
         
             if($ReturnHashtables) { $Output }
@@ -102,4 +92,4 @@ Param(
     }
 }
 
-Get-StartupInfo
+Get-StartupInfo -ReturnHashtables
