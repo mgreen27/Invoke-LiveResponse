@@ -5,7 +5,7 @@ function Invoke-LiveResponse
     A Module for Live Response and Forensic collections. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.95
+    Version: 0.96
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
@@ -19,7 +19,7 @@ function Invoke-LiveResponse
 
     Live Response
     - LiveResponse mode will execute any Powershell scripts placed inside a content folder.
-    - Results consist of the StdOut from the executed content > redirected from the collection machine to a local Results folder as ScrtipName.txt
+    - Results consist of the StdOut from the executed content to a Results folder as ScrtipName.txt
     - The benefit of this method is the ability to operationalise new capability easily by dropping in new content with desired StdOut.
 
     Both Forensic Collection and Liveresponse modes can be run:
@@ -76,6 +76,10 @@ function Invoke-LiveResponse
     Note: Does not connect to the remote host.
     Useful for troubleshooting or for creating a script that will be manually run on a host without WinRM configured.
     Script will be located in the current working directory (Get-Location) and will be named: <date>_Invoke-LiveResponse.ps1
+
+.PARAMETER NoBase64
+    Do not use base64 encoding for ForensicCopy mode Powerfrensics reflection..
+    Some Prevention tools block base64 encoded content from running. This switch switches to a byte array but makes a larger script.
 
 .PARAMETER Raw
     Specifies Files to collect for Forensic Collection Mode in comma seperated format.
@@ -216,6 +220,7 @@ function Invoke-LiveResponse
         [Parameter(Mandatory = $False)][String]$UNC,
         [Parameter(Mandatory = $False)][String]$LocalOut,
         [Parameter(Mandatory = $False)][Switch]$WriteScriptBlock,
+        [Parameter(Mandatory = $False)][Switch]$NoBase64,
         [Parameter(Mandatory = $False)][String]$Raw,
         [Parameter(Mandatory = $False)][String]$Copy,
         [Parameter(Mandatory = $False)][Switch]$All,
@@ -253,6 +258,7 @@ function Invoke-LiveResponse
     $Reg = $PSBoundParameters.ContainsKey('Reg')
     $User = $PSBoundParameters.ContainsKey('User')
     $Custom = $PSBoundParameters.ContainsKey('Custom')
+    $NoBase64 = $PSBoundParameters.ContainsKey('NoBase64')
 
     $Vss = $PSBoundParameters.ContainsKey('Vss')
 
@@ -341,12 +347,21 @@ function Invoke-LiveResponse
 
 
     # Path configuration  - will be included in all ForensicCopy and -LocalOut:$true sessions
-    if ($LocalOut -ne $True) {
-        $sbPath = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPathUnc.ps1" -raw))
-        $sbPath = [ScriptBlock]::Create("`n`$Unc = `"$Unc`"`n" + $sbPath.ToString())
+    if ($LocalOut) {
+        $sbPath = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPathLocal.ps1" -raw))
+
+        # adding in some logic to cover netowrk localout usecases
+        If ($LocalOut -ne $True) {
+            $sbPath = [ScriptBlock]::Create("`n`$Map = `"$LocalOut`"" + $sbPath.ToString())
+        }
+        Else { 
+            $sbPath = [ScriptBlock]::Create("`n`$Map = `$((Get-Location).Path)" + $sbPath.ToString())
+        }
+        
     }
     Else {
-        $sbPath = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPathLocal.ps1" -raw))
+        $sbPath = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPathUnc.ps1" -raw))
+        $sbPath = [ScriptBlock]::Create("`n`$Unc = `"$Unc`"`n" + $sbPath.ToString())
     }
 
     $Scriptblock = [ScriptBlock]::Create($sbStart.ToString() + $sbPath.ToString())
@@ -361,11 +376,13 @@ function Invoke-LiveResponse
 
     # PowerForensics - reflectively loads PF if Raw collection configured
     If ($Raw -Or $Mft -Or $Usnj -Or $Evtx -Or $Execution -Or $Reg -Or $User -Or $Disk -Or $All -Or $Custom){
-        $sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPowerForensics.ps1" -raw))
+        # Some EDR will prevent base64 reflection if -NoBase64 switch set, use byte array only. Byte array is larger size so giving option to configure both
+        If ($NoBase64) {$sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPowerForensicsNoBase64.ps1" -raw))}
+        Else {$sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPowerForensics.ps1" -raw))}
+
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPowerForensics.ToString())
         $PowerForensics = $True
         }
-
 
     # Add Copy-LiveResponse for ForensicCopy mode copy usecases
     If ($ForensicCopy -Or $Pf -Or $Copy){
@@ -562,7 +579,9 @@ function Invoke-LiveResponse
 
         If($ForensicCopy) {
             Write-Host -ForegroundColor Cyan "`nStarting ForensicCopy over WinRM..."
-            Write-Host "`tUNC Path: " $UNC.split(',')[0]
+            If ($LocalOut) { Write-Host "`tLocalOut Path: " $LocalOut }
+            Else { Write-Host "`tUNC Path: " $UNC.split(',')[0] }
+
             Write-Host "`tTo .\$date`Z_$Target`n"
             Write-Host $ForensicCopyText
 
