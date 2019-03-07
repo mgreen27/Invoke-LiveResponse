@@ -77,10 +77,6 @@ function Invoke-LiveResponse
     Useful for troubleshooting or for creating a script that will be manually run on a host without WinRM configured.
     Script will be located in the current working directory (Get-Location) and will be named: <date>_Invoke-LiveResponse.ps1
 
-.PARAMETER NoBase64
-    Do not use base64 encoding for ForensicCopy mode Powerfrensics reflection..
-    Some Prevention tools block base64 encoded content from running. This switch switches to a byte array but makes a larger script.
-
 .PARAMETER Raw
     Specifies Files to collect for Forensic Collection Mode in comma seperated format.
     File will leverage Powerforensics to raw copy items. Quotes reccomended for long path, required for csv.
@@ -220,7 +216,6 @@ function Invoke-LiveResponse
         [Parameter(Mandatory = $False)][String]$UNC,
         [Parameter(Mandatory = $False)][String]$LocalOut,
         [Parameter(Mandatory = $False)][Switch]$WriteScriptBlock,
-        [Parameter(Mandatory = $False)][Switch]$NoBase64,
         [Parameter(Mandatory = $False)][String]$Raw,
         [Parameter(Mandatory = $False)][String]$Copy,
         [Parameter(Mandatory = $False)][Switch]$All,
@@ -258,7 +253,6 @@ function Invoke-LiveResponse
     $Reg = $PSBoundParameters.ContainsKey('Reg')
     $User = $PSBoundParameters.ContainsKey('User')
     $Custom = $PSBoundParameters.ContainsKey('Custom')
-    $NoBase64 = $PSBoundParameters.ContainsKey('NoBase64')
 
     $Vss = $PSBoundParameters.ContainsKey('Vss')
 
@@ -376,10 +370,7 @@ function Invoke-LiveResponse
 
     # PowerForensics - reflectively loads PF if Raw collection configured
     If ($Raw -Or $Mft -Or $Usnj -Or $Evtx -Or $Execution -Or $Reg -Or $User -Or $Disk -Or $All -Or $Custom){
-        # Some EDR will prevent base64 reflection if -NoBase64 switch set, use byte array only. Byte array is larger size so giving option to configure both
-        If ($NoBase64) {$sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPowerForensicsNoBase64.ps1" -raw))}
-        Else {$sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPowerForensics.ps1" -raw))}
-
+        $sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPowerForensics.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPowerForensics.ToString())
         $PowerForensics = $True
         }
