@@ -209,8 +209,8 @@ Foreach ($User in $Users) {
     # User hives
     Copy-LiveResponse -path $profile -dest $out -filter "ntuser.dat" -forensic
     Copy-LiveResponse -path $profile -dest $out -filter "ntuser.dat.log*" -forensic
-    Copy-LiveResponse -path "$profile\AppData\Local\Microsoft\Windows" -dest "$out\Users\$user\AppData\Local\Microsoft\Windows" -filter "UserClass.dat" -forensic
-    Copy-LiveResponse -path "$profile\AppData\Local\Microsoft\Windows" -dest "$out\Users\$user\AppData\Local\Microsoft\Windows" -filter "UserClass.dat.log*" -forensic
+    Copy-LiveResponse -path "$profile\AppData\Local\Microsoft\Windows" -dest "$out\Users\$user\AppData\Local\Microsoft\Windows" -filter "UsrClass.dat" -forensic
+    Copy-LiveResponse -path "$profile\AppData\Local\Microsoft\Windows" -dest "$out\Users\$user\AppData\Local\Microsoft\Windows" -filter "UsrClass.dat.log*" -forensic
 
     # Recent file activity
     Copy-LiveResponse -path "$profile\AppData\Roaming\Microsoft\Windows\Recent" -dest "$out\Users\$user\AppData\Roaming\Microsoft\Windows\Recent" -recurse -where "'.lnk','.automaticDestinations-ms','.customDestinations-ms' -eq `$_.extension"
