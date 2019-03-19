@@ -5,7 +5,7 @@
         Starts WinRM on target system
     .DESCRIPTION
         Start WinRM and leave system as previous state
-        Switches for Computername (mandatory), Cretential and PsExec
+        Switches for Computername (mandatory), Credential and PsExec
     .NOTES./win
         Author - Matt Green (@mgreen27)
     .EXAMPLE 
