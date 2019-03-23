@@ -5,7 +5,7 @@ function Invoke-LiveResponse
     A Module for Live Response and Forensic collections. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.97
+    Version: 0.972
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
@@ -419,7 +419,7 @@ function Invoke-LiveResponse
     }
 
     # Prefetch
-    If ($Pf -Or $All){
+    If ($Pf -And !$All -And !$Execution){
         $sbPf = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\sbPrefetch.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPf.ToString())
         $ForensicCopyText = $ForensicCopyText + "`t`tPrefetch files`n"
