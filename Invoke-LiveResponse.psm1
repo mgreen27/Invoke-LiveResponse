@@ -5,7 +5,7 @@ function Invoke-LiveResponse
     A Module for Live Response and Forensic collections. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.972
+    Version: 0.93
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
@@ -528,9 +528,12 @@ function Invoke-LiveResponse
         
         Clear-Host
         Write-host -ForegroundColor Cyan "`nInvoke-LiveResponse"
-        Write-Host -ForegroundColor White "`n`tWriteScriptblock: " -NoNewline
-        Write-Host -ForegroundColor White "$(Get-Location)\$($date)_Invoke-LiveResponse.ps1`n"
+        Write-Host -ForegroundColor White "`n`tWriteScriptblock"
+        Write-Host -ForegroundColor White "`tScript:`t`t$(Get-Location)\$($date)_Invoke-LiveResponse.ps1"
 
+        If ($LocalOut){ Write-Host -ForegroundColor White "`tLocalOut:`t$LocalOut" }
+        Else { Write-Host -ForegroundColor White "`tUnc config:`t$Unc" }
+        Write-Host -ForegroundColor White "`nTo view script: Get-Content $(Get-Location)\$($date)_Invoke-LiveResponse.ps1`n"
 	}
     # WinRM execution
     else {
