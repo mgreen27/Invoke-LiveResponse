@@ -5,7 +5,7 @@ function Invoke-LiveResponse
     A Module for Live Response and Forensic collections. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.93
+    Version: 0.94
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
@@ -377,11 +377,15 @@ function Invoke-LiveResponse
     # PowerForensics - reflectively loads PF if Raw collection configured
     If ($Raw -Or $Mft -Or $Usnj -Or $Evtx -Or $Execution -Or $Reg -Or $User -Or $Disk -Or $All -Or $Custom){
         # Some EDR will prevent base64 reflection if -NoBase64 switch set, use byte array only. Byte array is larger size so giving option to configure both
-        If ($NoBase64) {$sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPowerForensicsNoBase64.ps1" -raw))}
-        Else {$sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPowerForensics.ps1" -raw))}
+        If ($NoBase64) { $sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPowerForensicsNoBase64.ps1" -raw)) }
+        Else { $sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPowerForensics.ps1" -raw)) }
 
-        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPowerForensics.ToString())
+        $sbForensicCopy = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbForensicCopy.ps1" -raw))
+
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPowerForensics.ToString() + $sbForensicCopy.ToString())
         $PowerForensics = $True
+
+
         }
 
     # Add Copy-LiveResponse for ForensicCopy mode copy usecases
