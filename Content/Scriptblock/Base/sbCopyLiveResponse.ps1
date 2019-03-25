@@ -38,6 +38,7 @@ function Copy-LiveResponse{
         [Parameter( Mandatory = $False)][Switch]$forensic
     )
 
+
     $ErrorActionPreference = "Silentlycontinue"
 
     # Create small hash table of path:dest:vssFlag to accomodate VSS usecase
@@ -67,7 +68,7 @@ function Copy-LiveResponse{
         $VssFlag = $Entry.Value[2]
 
         # Test for path and Get applicable files and folders for copy
-        if(test-path -path $path){
+        if(test-path -path $path) {
             if ($recurse) {
                 if ($filter) {
                     if ($exclude) {
@@ -115,7 +116,7 @@ function Copy-LiveResponse{
                         }
                     }
                 }
-                else{
+                else {
                     if ($exclude) {
                         if ($include) {
                             if ($where) {
@@ -266,58 +267,89 @@ function Copy-LiveResponse{
 
             $items | ForEach-Object { 
                 $out = $_.FullName -replace [regex]::escape($path), $dest
-
-                if ($recurse -and $_.PSIsContainer) {
-                    $CopyTargets[$CopyTargets.count] = @($_.FullName,$out,"FOLDER")
-                }
-                elseif (-not $_.PSIsContainer) {
-                    $CopyTargets[$CopyTargets.count] = @($_.FullName,$out,"FILE") 
+                If (-not $_.PSIsContainer) { 
+                    $FileHash = Get-FileHash $_.FullName -Algorithm sha256 | Select-Object sha256
+                    $CopyTargets[$CopyTargets.count] = @($_.FullName,$out,$FileHash.sha256)
                 }
             }
 
-
             # Copy items in hashtable or cover folder use case
             foreach ($item in $CopyTargets.getEnumerator() | Sort Key) {
+                
+                $ItemIn = $item.value[0]
+                $ItemOut = $item.value[1]
+                $sha256 = $item.value[2]
 
-                if ($item.value[2] -eq "FOLDER" -And $item.value[1]) {
-                    New-Item -Path $item.value[1] -ItemType directory -Force | out-null
-                }
-                Elseif ($item.value[2] -eq "FILE" -And $item.value[1]) {
-
-                    If (!(Test-Path (Split-Path -Path $item.value[1]))) {
-                        New-Item (Split-Path -Path $item.value[1]) -type directory -Force | Out-Null
-                    }
+                If ($ItemIn) {
 
                     # Forensic copy falling back (likley redundant to Copy-Item)
                     if ($forensic -and !$VssFlag) {
-
+                        If (-Not (Test-Path (Split-Path -Path $ItemOut))) {
+                            New-Item (Split-Path -Path $ItemOut) -type directory -Force | Out-Null
+                        }
                         try {
-                            Invoke-ForensicCopy -InFile $item.value[0] -OutFile $item.value[1]
+                            Invoke-ForensicCopy -InFile $ItemIn -OutFile $ItemOut
+                            $LogAction = "ForensicCopy"
                         }
                         Catch {
                             try { 
-                                Copy-Item -Path $item.value[0] -Destination $item.value[1] -Force 
-                                Write-Host "Info:"$item.value[0]"fell back to Copy-Item."
+                                Copy-Item -Path $ItemIn -Destination $ItemOut -Force 
+                                Write-Host "Info: $itemIn fell back to Copy-Item."
+                                $LogAction = "Copy-Item fallback"
                             }
-                            Catch { Write-Host "Error:"$item.value[0]"raw copy." }   
+                            Catch { 
+                                Write-Host "Error: $ItemIn raw copy."
+                                $LogAction = "Error: ForensicCopy"
+                            }   
                         }
                     }
                     # standard Copy-Item falling back to Forensic Copy
                     Else {
-                        try {
-                            Copy-Item -Path $item.value[0] -Destination $item.value[1] -Force
-                        }
-                        Catch { 
-                            try { 
-                                Invoke-ForensicCopy -InFile $item.value[0] -OutFile $item.value[1]
-                                Write-Host "Info:"$item.value[0]"fell back to Raw copy."
+                        # using dedup flag to determine if skipping collection.
+                        $Dedup = $Null
+
+                        If ($VssFlag) {
+                            # Checking ItemIn sha256 and comparing hashes in array that are not the same ItemIn
+                            $sha256 = (Get-FileHash -Path $ItemIn -Algorithm SHA256).sha256
+                            foreach ($item in $copyTargets.Values){
+                                If ($sha256 -eq $item[2] -and $item[0] -ne $ItemIn) { 
+                                    $Dedup = $True
+                                }
                             }
-                            Catch {
-                                if ( $Item.Value[0] -match "\\vss[0-9]\\" ) { Write-Host "Error:"$Item.Value[0].TrimStart($env:temp) "copy." }
-                                Else { Write-Host "Error:"$item.value[0]"copy." }
-                            } 
+                            $ItemIn = "VolumeShadowCopy" + $($ItemIn -split "\\vss")[1]
+                        }
+
+                        If ( !$Dedup) {
+                            # create Out folder structure if not exist
+                            If (-Not (Test-Path (Split-Path -Path $ItemOut))) {
+                                New-Item (Split-Path -Path $ItemOut) -type directory -Force | Out-Null
+                            }
+                            try {
+
+                                Copy-Item -Path $ItemIn -Destination $ItemOut -Force
+                                $LogAction = "Copy-Item"
+                            }
+                            Catch { 
+                                try { 
+                                    Invoke-ForensicCopy -InFile $ItemIn -OutFile $ItemOut
+                                    Write-Host "Info: $ItemIn fell back to Raw copy."
+                                    $LogAction = "ForensicCopy fallback"
+                                }
+                                Catch {
+                                    if ( $ItemIn -match "\\vss[0-9]\\" ) { Write-Host "Error:"$ItemIn.TrimStart($env:temp) "copy." }
+                                    Else { Write-Host "Error: $ItemIn copy." }
+                                    $LogAction = "Error: Copy-Item"
+                                } 
+                            }
+                        }
+                        Else { 
+                            $LogAction = "VSS Dedup"
+                            $ItemOut = $Null
+                            Write-Host "Info: VSS Dedup $ItemIn"
                         }
                     }
+                    # Write line to CollectionLog
+                    Add-Content -Path $CollectionLog "$(get-date ([DateTime]::UtcNow) -format yyyy-MM-ddZhh:mm:ss.ffff),$LogAction,$ItemIn,$ItemOut,$sha256" -Encoding Ascii
                 }
             }
         }

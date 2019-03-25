@@ -4,21 +4,18 @@ function Invoke-ForensicCopy {
     Param(
         [Parameter(Mandatory = $True)][String]$InFile,
         [Parameter( Mandatory = $True)][String]$OutFile,
-        [Parameter(Mandatory = $False)][String]$DataStream
+        [Parameter(Mandatory = $False)][String]$DataStream,
+        [Parameter(Mandatory = $False)][Switch]$Log
         )
 
-    If ($InFile -eq $OutFile){
-        Break
-    }
+    If ($InFile -eq $OutFile){ Break }
+    $LogAction = "ForensicCopy"
 
     If (Test-Path $OutFile){
         Remove-Item $OutFile -Recurse -Force -ErrorAction SilentlyContinue | Out-Null
     }
 
-    If (!$DataStream){
-        $DataStream="DATA"
-    }
-
+    If (!$DataStream){ $DataStream="DATA" }
     $Drive = Split-Path -Path $InFile -Qualifier
     $Vbr = [PowerForensics.FileSystems.Ntfs.NtfsVolumeBootRecord]::Get("\\.\$Drive")
     $Record = [PowerForensics.FileSystems.Ntfs.Filerecord]::Get("$Infile")
@@ -34,6 +31,7 @@ function Invoke-ForensicCopy {
             If (!$Datarun) {
                 Write-Host "Parsing error: reverting to fsutil Usn dump"
                 $OutFile = $OutFile + "_dump.txt"
+                $LogAction = "Fsutil UnsnDump rollback"
 
                 If (Test-Path $OutFile) {
                     Remove-Item $OutFile -Force -ErrorAction SilentlyContinue
@@ -77,5 +75,8 @@ function Invoke-ForensicCopy {
             [PowerForensics.Utilities.DD]::Get("\\.\$Drive",$OutFile,$Offset,$Blocksize,$Count)
             [gc]::Collect()
         }
+    }
+    If ($Log) { 
+        Add-Content -Path $CollectionLog "$(get-date ([DateTime]::UtcNow) -format yyyy-MM-ddZhh:mm:ss.ffff),$LogAction,$InFile,$OutFile," -Encoding Ascii
     }
 }
