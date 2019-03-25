@@ -5,7 +5,7 @@ function Invoke-LiveResponse
     A Module for Live Response and Forensic collections. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.94
+    Version: 0.95
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
