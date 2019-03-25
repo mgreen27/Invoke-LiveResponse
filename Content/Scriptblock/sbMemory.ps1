@@ -13,11 +13,18 @@ If (Test-Path $MemDumpTool) {
         }
         Write-Host -ForegroundColor Yellow "`tCollecting Memory"
         cmd /c "$MemDumpTool --format raw -o $Output\memory.zip > null 2>&1"
+        $LogAction = "MemoryDump"
     }
     Catch{
         Write-Host -ForegroundColor Red "`tError: dMemoryDump."
+        $LogAction = "Error: WinPMem not found"
     }
 }
 Else{
-    Write-Host -ForegroundColor Red "`tError: $MemDumpTool not found at path. See help for download details."
+    Write-Host -ForegroundColor Red "`tError: WinPMem not found at path. See help for download details."
+    $LogAction = "Error: WinPMem not found"
 }
+
+# Adding logging for custom items that do not use Copy-LiveResponse
+If(Test-Path "$Output\memory.zip") { $ItemOut = "$Output\memory.zip" }
+Add-Content -Path $CollectionLog "$(get-date ([DateTime]::UtcNow) -format yyyy-MM-ddZhh:mm:ss.ffff),$LogAction,Memory,$ItemOut," -Encoding Ascii

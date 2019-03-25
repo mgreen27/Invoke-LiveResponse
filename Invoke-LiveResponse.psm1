@@ -5,7 +5,7 @@ function Invoke-LiveResponse
     A Module for Live Response and Forensic collections. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.93
+    Version: 0.94
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
@@ -241,7 +241,7 @@ function Invoke-LiveResponse
         [Parameter(Mandatory = $False)][Switch]$Csv,
         [Parameter(Mandatory = $False)][Switch]$Shell
         )
-
+    
     # Set switches
     $Shell = $PSBoundParameters.ContainsKey('Shell')
     $useSSL = $PSBoundParameters.ContainsKey('useSSL')
@@ -294,7 +294,7 @@ function Invoke-LiveResponse
         }
     }
     
-    If ($Raw -Or $Copy -Or $Mft -Or $Usnj -Or $Pf -Or $Execution -Or $Reg -Or $Evtx -Or $User -Or $Disk -Or $Mem -Or $All -Or $Custom){
+    If ($Raw -Or $Copy -Or $Mft -Or $Usnj -Or $Pf -Or $Execution -Or $Reg -Or $Evtx -Or $User -Or $Disk -Or $All -Or $Custom){
         $ForensicCopy = $True
 		If (!$LocalOut) {
 			If (!$UNC){$UNC = $True}
@@ -321,7 +321,7 @@ function Invoke-LiveResponse
     $PowerForensics = $False
 
     # Shell mode 
-    If (!$ForensicCopy -And !$LR){
+    If (!$ForensicCopy -And !$LR -And !$Mem){
         Write-Host -ForegroundColor Yellow "`tNo collections specified - would you like a shell?"
         $Readhost = Read-Host "`ty / n " 
 
@@ -366,23 +366,31 @@ function Invoke-LiveResponse
 
     $Scriptblock = [ScriptBlock]::Create($sbStart.ToString() + $sbPath.ToString())
 
-    # MemoryDump
+
+    # Adding Get-FileHash function for hashing requirements
+    If ($ForensicCopy -Or $Pf -Or $Copy -Or $Mem){
+        $sbGetFileHash = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbGetFileHash.ps1" -raw))
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbGetFileHash.ToString())
+    }
+
+    # MemoryDump - running before all else to minimise forensic footprint
     If ($Mem -Or $All) { 
         $sbmemory = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\sbMemory.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbMemory.ToString())
         $ForensicCopyText = $ForensicCopyText + "`t`t`Memory Dump`n"
     }
 
-
     # PowerForensics - reflectively loads PF if Raw collection configured
     If ($Raw -Or $Mft -Or $Usnj -Or $Evtx -Or $Execution -Or $Reg -Or $User -Or $Disk -Or $All -Or $Custom){
         # Some EDR will prevent base64 reflection if -NoBase64 switch set, use byte array only. Byte array is larger size so giving option to configure both
-        If ($NoBase64) {$sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPowerForensicsNoBase64.ps1" -raw))}
-        Else {$sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPowerForensics.ps1" -raw))}
+        If ($NoBase64) { $sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPowerForensicsNoBase64.ps1" -raw)) }
+        Else { $sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPowerForensics.ps1" -raw)) }
 
-        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPowerForensics.ToString())
+        $sbForensicCopy = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbForensicCopy.ps1" -raw))
+
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPowerForensics.ToString() + $sbForensicCopy.ToString())
         $PowerForensics = $True
-        }
+    }
 
     # Add Copy-LiveResponse for ForensicCopy mode copy usecases
     If ($ForensicCopy -Or $Pf -Or $Copy){
@@ -516,7 +524,7 @@ function Invoke-LiveResponse
     if ($WriteScriptBlock) {
         $LocalScriptBlock = [ScriptBlock]::Create("Write-Host -ForegroundColor Cyan `"Starting Invoke-LiveResponse.`"`nWrite-Host -ForegroundColor White `"``tLocal Mode.`"`n")
 
-        if ($ForensicCopy) {
+        if ($ForensicCopy -Or $Mem) {
             $LocalScriptBlock = [ScriptBlock]::Create($LocalScriptBlock.ToString() + "Write-Host -ForegroundColor Cyan `"Starting ForensicCopy.`"`n" + "`n" + $ScriptBlock.ToString())
         }
 
@@ -531,6 +539,10 @@ function Invoke-LiveResponse
         Write-Host -ForegroundColor White "`n`tWriteScriptblock"
         Write-Host -ForegroundColor White "`tScript:`t`t$(Get-Location)\$($date)_Invoke-LiveResponse.ps1"
 
+        $Switches = $PSBoundParameters.Keys
+        $Switches = $Switches | Where-Object { $_ -ne 'Computername' -And $_ -ne 'Credential' -And $_ -ne 'UNC' -And $_ -ne 'Localout' -And $_ -ne 'WriteScriptblock' }
+        Write-Host -ForegroundColor White "`tSwitches:`t-$($Switches -join ", -")"
+        
         If ($LocalOut){ Write-Host -ForegroundColor White "`tLocalOut:`t$LocalOut" }
         Else { Write-Host -ForegroundColor White "`tUnc config:`t$Unc" }
         Write-Host -ForegroundColor White "`nTo view script: Get-Content $(Get-Location)\$($date)_Invoke-LiveResponse.ps1`n"
