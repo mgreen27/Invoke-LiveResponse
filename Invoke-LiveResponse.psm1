@@ -5,7 +5,7 @@ function Invoke-LiveResponse
     A Module for Live Response and Forensic collections. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.95
+    Version: 0.952
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
@@ -532,12 +532,20 @@ function Invoke-LiveResponse
             $sbLocalLiveResponse = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbLocalLiveResponse.ps1" -raw))
             $LocalScriptblock = [ScriptBlock]::Create($LocalScriptblock.ToString() + "`n" + $sbLocalLiveResponse.ToString())
         }
-		$LocalScriptblock | Out-String -Width 4096 | Out-File "$(Get-Location)\$($date)_Invoke-LiveResponse.ps1"
+
+        # Test for root of drive
+        if ([System.IO.path]::GetPathRoot((Get-Location).Path) -eq (Get-Location).Path) {
+            $Output = (Get-Location).Path
+        }
+        Else { 
+            $Output = (Get-Location).Path + "\"
+        }
+		$LocalScriptblock | Out-String -Width 4096 | Out-File "$Output$($date)_Invoke-LiveResponse.ps1"
         
         Clear-Host
         Write-host -ForegroundColor Cyan "`nInvoke-LiveResponse"
         Write-Host -ForegroundColor White "`n`tWriteScriptblock"
-        Write-Host -ForegroundColor White "`tScript:`t`t$(Get-Location)\$($date)_Invoke-LiveResponse.ps1"
+        Write-Host -ForegroundColor White "`tScript:`t`t$Output$($date)_Invoke-LiveResponse.ps1"
 
         $Switches = $PSBoundParameters.Keys
         $Switches = $Switches | Where-Object { $_ -ne 'Computername' -And $_ -ne 'Credential' -And $_ -ne 'UNC' -And $_ -ne 'Localout' -And $_ -ne 'WriteScriptblock' }
@@ -545,7 +553,7 @@ function Invoke-LiveResponse
         
         If ($LocalOut){ Write-Host -ForegroundColor White "`tLocalOut:`t$LocalOut" }
         Else { Write-Host -ForegroundColor White "`tUnc config:`t$Unc" }
-        Write-Host -ForegroundColor White "`nTo view script: Get-Content $(Get-Location)\$($date)_Invoke-LiveResponse.ps1`n"
+        Write-Host -ForegroundColor White "`nTo view script: Get-Content $Output$($date)_Invoke-LiveResponse.ps1`n"
 	}
     # WinRM execution
     else {
@@ -642,13 +650,13 @@ function Invoke-LiveResponse
             }
 
             # Remove null results for simple analysis
-            Foreach ($Item in (Get-ChildItem -Path $Results)) {
+            Foreach ($Item in (Get-ChildItem -Path $Results -Force)) {
                 If ($Item.length -eq 0){Remove-Item -Path $Item.FullName -Force}
             }
             
-            If (Get-ChildItem -Path $Results -Recurse) {
+            If (Get-ChildItem -Path $Results -force -Recurse) {
                 Write-Host -ForegroundColor Yellow "`nListing valid results in LiveResponse collection:"
-                Get-ChildItem -Path $Results -Recurse | select-object LastWriteTimeUtc, Length, Name | Format-Table -AutoSize
+                Get-ChildItem -Path $Results -Recurse -Force | select-object LastWriteTimeUtc, Length, Name | Sort-Object FullName | Format-Table -AutoSize
             }
             Else{
                 Write-Host -ForegroundColor Yellow "`nNo valid LiveResponse results"

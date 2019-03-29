@@ -1,11 +1,19 @@
 ﻿
 Write-Host -ForegroundColor Cyan "`nStarting LiveResponse."
 
-$Content = $((Get-Location).Path + '\Content')
 $Date = $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd)
 
-$Output = $((Get-Location).Path) + "\" + $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd) + "Z_" + $env:computername
-$Results = $Output + "\LR"
+# Test for root of drive
+if ([System.IO.path]::GetPathRoot((Get-Location).Path) -eq (Get-Location).Path) {
+    $Content = $((Get-Location).Path + 'Content')
+    $Output = $((Get-Location).Path) + $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd) + "Z_" + $env:computername
+    $Results = $Output + "LR"
+}
+Else { 
+    $Content = $((Get-Location).Path + '\Content')
+    $Output = $((Get-Location).Path) + "\" + $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd) + "Z_" + $env:computername
+    $Results = $Output + "\LR"
+}
 
 Write-Host "`tFrom Content `n`t$Content"
 Write-Host "`tNote: Error handling during LiveResponse mode is required to be handled in content.`n"
@@ -13,14 +21,14 @@ Write-Host "`tTo Results `n`t$Results`n"
 
 $Scripts = Get-ChildItem -Path "$Content\*.ps1"
 
-If (Test-Path $Results) {Remove-Item $Results -Recurse -Force -ErrorAction SilentlyContinue | Out-Null}
+If (Test-Path $Results) { Remove-Item $Results -Recurse -Force -ErrorAction SilentlyContinue | Out-Null }
 New-Item $Results -type directory -ErrorAction SilentlyContinue | Out-Null
 
 Foreach ($Script in $Scripts){
     Write-Host -ForegroundColor Yellow "`tRunning " $Script.Name
     [gc]::collect()
-    try {$ScriptResults = Invoke-Expression $Script.FullName -ErrorAction SilentlyContinue}
-    catch {Write-Host -ForegroundColor Red "`tError in $Script"}
+    try { $ScriptResults = Invoke-Expression $Script.FullName -ErrorAction SilentlyContinue }
+    catch { Write-Host -ForegroundColor Red "`tError in $Script" }
 
     # depending on Content we can strip properties from Format-List results with | Select-Object above
     If (!$csv){
@@ -34,13 +42,13 @@ Foreach ($Script in $Scripts){
 }
 
 # Remove null results for simple analysis
-Foreach ($Item in (Get-ChildItem -Path $Results)){
+Foreach ($Item in (Get-ChildItem -Path $Results -Force)){
     If ($Item.length -eq 0){Remove-Item -Path $Item.FullName -Force}
 }
 
-If (Get-ChildItem -Path $Results){
+If (Get-ChildItem -Path $Results -Force){
     Write-Host -ForegroundColor Yellow "`nListing valid results in LiveResponse collection:"
-    Get-ChildItem -Path $Results | select-object LastWriteTimeUtc, Length, Name | Format-Table -AutoSize
+    Get-ChildItem -Path $Results -Force | select-object LastWriteTimeUtc, Length, Name | Format-Table -AutoSize
 }
 Else {
     Write-Host -ForegroundColor Yellow "`nNo valid LiveResponse results"

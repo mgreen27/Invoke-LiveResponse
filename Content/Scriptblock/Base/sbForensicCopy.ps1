@@ -29,7 +29,7 @@ function Invoke-ForensicCopy {
 
             # If No $J Datarun from parsing issue, dump USN via fsutil
             If (!$Datarun) {
-                Write-Host "Parsing error: reverting to fsutil Usn dump"
+                Write-Host "Parsing ERROR: reverting to fsutil Usn dump"
                 $OutFile = $OutFile + "_dump.txt"
                 $LogAction = "Fsutil UnsnDump rollback"
 
@@ -77,6 +77,7 @@ function Invoke-ForensicCopy {
         }
     }
     If ($Log) { 
-        Add-Content -Path $CollectionLog "$(get-date ([DateTime]::UtcNow) -format yyyy-MM-ddZhh:mm:ss.ffff),$LogAction,$InFile,$OutFile," -Encoding Ascii
+        $fileSize = $Record.AllocatedSize
+        Add-Content -Path $CollectionLog "$(get-date ([DateTime]::UtcNow) -format yyyy-MM-ddZhh:mm:ss.ffff),$LogAction,$InFile,$OutFile,$fileSize," -Encoding Ascii
     }
 }
