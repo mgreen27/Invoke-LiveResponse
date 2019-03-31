@@ -11,11 +11,17 @@ function Invoke-ForensicCopy {
     If ($InFile -eq $OutFile){ Break }
     $LogAction = "ForensicCopy"
 
+    # test for previous version and remove if exists
     If (Test-Path $OutFile){
         Remove-Item $OutFile -Recurse -Force -ErrorAction SilentlyContinue | Out-Null
     }
+    # create folder structure if not exis
+    Elseif (-Not (Test-Path (Split-Path $OutFile))) {
+        New-Item ($Out) -type directory | Out-Null
+    }
 
     If (!$DataStream){ $DataStream="DATA" }
+
     $Drive = Split-Path -Path $InFile -Qualifier
     $Vbr = [PowerForensics.FileSystems.Ntfs.NtfsVolumeBootRecord]::Get("\\.\$Drive")
     $Record = [PowerForensics.FileSystems.Ntfs.Filerecord]::Get("$Infile")
@@ -77,7 +83,6 @@ function Invoke-ForensicCopy {
         }
     }
     If ($Log) { 
-        $fileSize = $Record.AllocatedSize
-        Add-Content -Path $CollectionLog "$(get-date ([DateTime]::UtcNow) -format yyyy-MM-ddZhh:mm:ss.ffff),$LogAction,$InFile,$OutFile,$fileSize," -Encoding Ascii
+        Add-Content -Path $CollectionLog "$(get-date ([DateTime]::UtcNow) -format yyyy-MM-ddZhh:mm:ss.ffff),$LogAction,$InFile,$OutFile," -Encoding Ascii
     }
 }

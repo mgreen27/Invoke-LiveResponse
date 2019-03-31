@@ -23,4 +23,4 @@ Catch{
 
 # Setting log location as Global and creating log
 $Global:CollectionLog = "$Output\$(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd)_collection.log"
-Add-Content -Path $CollectionLog "TimeUTC,Action,Source,Destination,FileSize,Sha256(Source)" -Encoding Ascii
+Add-Content -Path $CollectionLog "TimeUTC,Action,Source,Destination,Sha256(Source)" -Encoding Ascii

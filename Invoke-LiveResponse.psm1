@@ -5,7 +5,7 @@ function Invoke-LiveResponse
     A Module for Live Response and Forensic collections. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.952
+    Version: 0.953
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
@@ -156,6 +156,9 @@ function Invoke-LiveResponse
 .PARAMETER Shell
     An Optional switch to invoke Shell mode instead of closing PSSession after collection. Shell mode leaves the PSSession open and allows user to Enter-PSSession for manual tasks.
 
+.PARAMETER Verbose
+    An Optional switch to enable verbose mode. Verbose mose will output all VSS dedupe events to screen.
+
 .EXAMPLE
     Invoke-LiveResponse -ComputerName <ComputerName> -Credential <domain>\<user> -all -Map <drive>: -UNC "\\<UNC_path_or_IP>\<folder> /user:<shareuserdomain>\<shareUser> <password>"
 
@@ -240,6 +243,7 @@ function Invoke-LiveResponse
         [Parameter(Mandatory = $False)][String]$Results,
         [Parameter(Mandatory = $False)][Switch]$Csv,
         [Parameter(Mandatory = $False)][Switch]$Shell
+        #[Parameter(Mandatory = $False)][Switch]$Verbose
         )
     
     # Set switches
@@ -261,6 +265,7 @@ function Invoke-LiveResponse
     $NoBase64 = $PSBoundParameters.ContainsKey('NoBase64')
 
     $Vss = $PSBoundParameters.ContainsKey('Vss')
+    $verbose = $PSBoundParameters.ContainsKey('Verbose')
 
     # Live Response
     $LR = $PSBoundParameters.ContainsKey('LR')
@@ -339,7 +344,7 @@ function Invoke-LiveResponse
     $Scriptblock = $null
     
     # Start output string
-    $ForensicCopyText = "`tForensicCopy Items:`n"
+    $ForensicCopyText = "`tCollection Items:`n"
 
 
     # CPU Priority - will be included in all Invoke-Liveresponse Scriptblocks
@@ -364,7 +369,8 @@ function Invoke-LiveResponse
         $sbPath = [ScriptBlock]::Create("`n`$Unc = `"$Unc`"`n" + $sbPath.ToString())
     }
 
-    $Scriptblock = [ScriptBlock]::Create($sbStart.ToString() + $sbPath.ToString())
+    If ($Verbose) { $Scriptblock = [ScriptBlock]::Create($sbStart.ToString() + "`n`$Global:verbose = `$True`n" + $sbPath.ToString()) }
+    Else { $Scriptblock = [ScriptBlock]::Create($sbStart.ToString() + $sbPath.ToString()) }
 
 
     # Adding Get-FileHash function for hashing requirements
@@ -378,6 +384,25 @@ function Invoke-LiveResponse
         $sbmemory = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\sbMemory.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbMemory.ToString())
         $ForensicCopyText = $ForensicCopyText + "`t`t`Memory Dump`n"
+    }
+
+    # PSReflect for WinAPI in powershell!
+    If ($ForensicCopy -Or $Pf -Or $Copy -Or $Mem -or $Custom){
+        $sbPSReflect = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPSReflect.ps1" -raw))
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPSReflect.ToString())
+    }
+
+    # Add Volume Shadow Copy for VSS collection usecases
+    If ($Vss){
+        $sbVssMount = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbVssMount.ps1" -raw))
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbVssMount.ToString())
+        $ForensicCopyText = $ForensicCopyText + "`t`t`Volume Shadow Copy`n"
+    }
+
+    # Get-System only if LocalOut:$True
+    If ($ForensicCopy -Or $Pf -Or $Copy -Or $Mem -or $Custom -And $LocalOut:$True){
+        $sbGetSystem = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbGetSystem.ps1" -raw))
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbGetSystem.ToString())
     }
 
     # PowerForensics - reflectively loads PF if Raw collection configured
@@ -396,13 +421,6 @@ function Invoke-LiveResponse
     If ($ForensicCopy -Or $Pf -Or $Copy){
         $sbCopyLiveResponse = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbCopyLiveResponse.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbCopyLiveResponse.ToString())
-    }
-
-    # Add Volume Shadow Copy for VSC collection usecases
-    If ($Vss){
-        $sbVssMount = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbVssMount.ps1" -raw))
-        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbVssMount.ToString())
-        $ForensicCopyText = $ForensicCopyText + "`t`t`Volume Shadow Copy`n"
     }
 
     # $MFT collection
@@ -522,7 +540,10 @@ function Invoke-LiveResponse
 
     # WriteScriptBlock for local collection and testing
     if ($WriteScriptBlock) {
-        $LocalScriptBlock = [ScriptBlock]::Create("Write-Host -ForegroundColor Cyan `"Starting Invoke-LiveResponse.`"`nWrite-Host -ForegroundColor White `"``tLocal Mode.`"`n")
+        If ($LR) {
+            $ForensicCopyText = $ForensicCopyText + "`t`t`LiveResponse scripts`n"
+        }
+        $LocalScriptBlock = [ScriptBlock]::Create("Write-Host -ForegroundColor Cyan `"Starting Invoke-LiveResponse.`"`nWrite-Host -ForegroundColor White `"``tLocal Mode.`n`"@`"`n`n$ForensicCopyText`n`"@`n")
 
         if ($ForensicCopy -Or $Mem) {
             $LocalScriptBlock = [ScriptBlock]::Create($LocalScriptBlock.ToString() + "Write-Host -ForegroundColor Cyan `"Starting ForensicCopy.`"`n" + "`n" + $ScriptBlock.ToString())
