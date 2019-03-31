@@ -1,10 +1,6 @@
 ﻿
-# Disk artefact collection
+# NTFS artefact collection
 $Out = "$Output\" + $env:systemdrive.TrimEnd(':')
-
-If (! (Test-Path $Out)){
-     New-Item ($Out) -type directory | Out-Null
-}
 
 # $MFT
 Write-Host -ForegroundColor Yellow "`tCollecting `$MFT"

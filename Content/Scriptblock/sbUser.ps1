@@ -3,7 +3,8 @@
 Write-Host -ForegroundColor Yellow "`tCollecting User Artefacts"
                        
 $Users = Get-ChildItem "$env:systemdrive\Users\" -Force | where-object {$_.PSIsContainer} | Where-object {
-$_.Name -ne "Public" -And $_.Name -ne "All Users" -And $_.Name -ne "Default" -And $_.Name -ne "Default User"} | select-object -ExpandProperty name
+    $_.Name -ne "All Users" -And $_.Name -ne "Default User" # remove Junctions
+} | select-object -ExpandProperty name
 
 Foreach ($User in $Users) {
     $profile = "$env:systemdrive\Users\$User"
@@ -11,9 +12,9 @@ Foreach ($User in $Users) {
 
 
     # User hives
-    Copy-LiveResponse -path $profile -dest $out -filter "ntuser.dat" -forensic
-    Copy-LiveResponse -path $profile -dest $out -filter "ntuser.dat.log*" -forensic
-    Copy-LiveResponse -path "$profile\AppData\Local\Microsoft\Windows" -dest "$out\AppData\Local\Microsoft\Windows" -filter "UsrClass.dat" -forensic
+    Copy-LiveResponse -path "$profile" -dest $out -filter "ntuser.dat"
+    Copy-LiveResponse -path "$profile" -dest $out -filter "ntuser.dat.log*"
+    Copy-LiveResponse -path "$profile\AppData\Local\Microsoft\Windows" -dest "$out\AppData\Local\Microsoft\Windows" -filter "UsrClass.dat"
 
     # recent files
     Copy-LiveResponse -path "$profile\AppData\Roaming\Microsoft\Windows\Recent" -dest "$out\AppData\Roaming\Microsoft\Windows\Recent" -recurse
@@ -23,7 +24,7 @@ Foreach ($User in $Users) {
     Copy-LiveResponse -path "$profile\AppData\Local\Microsoft\Outlook" -dest "$out\AppData\Local\Microsoft\Outlook" -where "'.pst','.ost' -eq `$_.extension"
 
     # Powershell
-    #Copy-LiveResponse -path "$profile\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadline" -dest "$out\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadline" -filter "ConsoleHost_history.txt"
+    Copy-LiveResponse -path "$profile\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadline" -dest "$out\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadline" -filter "ConsoleHost_history.txt"
 
     # Browser Artifacts
     Copy-LiveResponse -path "$profile\AppData\Roaming\Microsoft\Windows\IEDownloadHistory" -dest "$out\AppData\Roaming\Microsoft\Windows\IEDownloadHistory" #-filter "index.dat" # IE8-9
@@ -33,6 +34,6 @@ Foreach ($User in $Users) {
     Copy-LiveResponse -path "$profile\AppData\Local\Google\Chrome\User Data\Default\History" -dest "$out\AppData\Local\Google\Chrome\User Data\Default\History" # Chrome Win7/8/10
 
     # Windows 10 Timeline
-    Copy-LiveResponse -path "$profile\AppData\ConnectedDevicesPlatform" -dest "$out\AppData\ConnectedDevicesPlatform" -recurse -filter "ActivitivitiesCache.db" -forensic
+    Copy-LiveResponse -path "$profile\AppData\ConnectedDevicesPlatform" -dest "$out\AppData\ConnectedDevicesPlatform" -recurse -filter "ActivitivitiesCache.db"
 
 }

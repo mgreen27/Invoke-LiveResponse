@@ -289,7 +289,7 @@ function Copy-LiveResponse{
                         Catch {
                             try { 
                                 Copy-Item -Path $ItemIn -Destination $ItemOut -Force 
-                                Write-Host "INFO: $itemIn fell back to Copy-Item."
+                                if ($Verbose) { Write-Host "INFO: $itemIn fell back to Copy-Item." }
                                 $LogAction = "Copy-Item fallback"
                             }
                             Catch { 
@@ -326,8 +326,10 @@ function Copy-LiveResponse{
                             Catch { 
                                 try { 
                                     Invoke-ForensicCopy -InFile $ItemIn -OutFile $ItemOut
-                                    if ($VssFlag) { Write-Host "INFO: $ItemInVss fell back to Raw copy." }
-                                    else { Write-Host "INFO: $ItemIn fell back to Raw copy." }
+                                    if ($Verbose) { 
+                                        if ($VssFlag) { Write-Host "INFO: $ItemInVss fell back to Raw copy." }
+                                        else { Write-Host "INFO: $ItemIn fell back to Raw copy." }
+                                    }
                                     $LogAction = "ForensicCopy fallback"
                                 }
                                 Catch {
@@ -340,7 +342,7 @@ function Copy-LiveResponse{
                         Else { 
                             $LogAction = "VSS Dedup"
                             $ItemOut = $Null
-                            Write-Host "INFO: VSS Dedup $ItemInVss"
+                            if ($Verbose) { Write-Host "INFO: VSS Dedup $ItemInVss" }
                         }
                     }
                     # Write line to CollectionLog
