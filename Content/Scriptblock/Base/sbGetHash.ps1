@@ -1,5 +1,5 @@
 ﻿
-function Get-FileHash { 
+function Get-Hash { 
     <#
         .SYNOPSIS
             Calculates the hash on a given file based on the seleced hash algorithm.
@@ -25,7 +25,7 @@ function Get-FileHash {
                 $item = (Join-Path $pwd ($item -replace "\.\\",""))
             }
            If(Test-Path $item -Type Container) {
-              Write-Warning ("Cannot calculate hash for directory: {0}" -f $item)
+              #Write-Warning ("Cannot calculate hash for directory: {0}" -f $item)
               Return
            }
            $object = New-Object PSObject -Property @{ 
