@@ -373,10 +373,10 @@ function Invoke-LiveResponse
     Else { $Scriptblock = [ScriptBlock]::Create($sbStart.ToString() + $sbPath.ToString()) }
 
 
-    # Adding Get-FileHash function for hashing requirements
+    # Adding Get-Hash function for hashing requirements
     If ($ForensicCopy -Or $Pf -Or $Copy -Or $Mem){
-        $sbGetFileHash = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbGetFileHash.ps1" -raw))
-        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbGetFileHash.ToString())
+        $sbGetHash = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbGetHash.ps1" -raw))
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbGetHash.ToString())
     }
 
     # MemoryDump - running before all else to minimise forensic footprint
@@ -387,7 +387,7 @@ function Invoke-LiveResponse
     }
 
     # PSReflect for WinAPI in powershell!
-    If ($ForensicCopy -Or $Pf -Or $Copy -Or $Mem -or $Custom){
+    If ($ForensicCopy -Or $Pf -Or $Copy -or $Custom -or $Vss){
         $sbPSReflect = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPSReflect.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPSReflect.ToString())
     }
@@ -400,7 +400,7 @@ function Invoke-LiveResponse
     }
 
     # Get-System only if LocalOut:$True
-    If ($ForensicCopy -Or $Pf -Or $Copy -Or $Mem -or $Custom -And $LocalOut:$True){
+    If ($ForensicCopy -Or $Pf -Or $Copy -or $Custom -And $LocalOut -eq $True){
         $sbGetSystem = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbGetSystem.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbGetSystem.ToString())
     }

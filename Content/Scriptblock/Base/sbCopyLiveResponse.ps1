@@ -40,7 +40,6 @@ function Copy-LiveResponse{
         Foreach ($Drive in $Vss) {
             If ($Drive -match 'vss') {    
                 $dPath = $Drive + (Split-Path $Path -NoQualifier)
-
                 $stringFind = "$env:computername\" + $env:systemdrive.TrimEnd(':')
                 $stringReplace = "$env:computername\" + $(split-path $Drive -leaf)
                 $dDest = $Dest.Replace($stringFind,$stringReplace)
@@ -52,10 +51,9 @@ function Copy-LiveResponse{
     }
     Else { $PathTable[$PathTable.count] = @($Path,$Dest,$False) }
 
+    Foreach ($Entry in $PathTable.getEnumerator() | Where-Object { $_.Value[0] } | Sort Key) {
 
-    Foreach ($Entry in $PathTable.getEnumerator() | Sort Key) {
-
-        $Path = $Entry.Value[0]
+        $Path = $Entry.Value[0].trimend("\") + "\"
         $Dest = $Entry.Value[1]
         $VssFlag = $Entry.Value[2]
 
@@ -103,7 +101,7 @@ function Copy-LiveResponse{
                             }
                             else {
                                 # 8 - Copy-LiveResponse -path $path -dest $dest -recurse -filter $filter
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Recurse -Filter $filter -Force -ErrorAction SilentlyContinue" -ErrorAction SilentlyContinue
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Recurse -Filter $filter -Force -ErrorAction SilentlyContinue"
                             }
                         }
                     }
@@ -135,21 +133,21 @@ function Copy-LiveResponse{
                         if ($include) {
                             if ($where) { 
                                 # 13 - Copy-LiveResponse -path $path -dest $dest -Recurse -Include $include -where $where
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Include $include -Recurse -Force | Where-Object { $where }"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Include $include -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $where }"
                             }
                             else { 
                                 # 14 - Copy-LiveResponse -path $path -dest $dest -Recurse -Include $includee
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Include $include -Recurse -Force"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Include $include -Recurse -Force -ErrorAction SilentlyContinue"
                             }
                         }
                         Else { 
                             if ($where) { 
                                 # 15 - Copy-LiveResponse -path $path -dest $dest -Recurse -Include $include -where $where
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Recurse -Force | Where-Object { $where }"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $where }"
                             }
                             else { 
                                 # 16 - Copy-LiveResponse -path $path -dest $dest -Recurse
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Recurse -Force"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Recurse -Force -ErrorAction SilentlyContinue"
                             }
                         }
                     }
@@ -161,21 +159,21 @@ function Copy-LiveResponse{
                         if ($include) {
                             if ($where) { 
                                 # 17 - Copy-LiveResponse -path $path -dest $dest -filter $filter -Exclude $exclude -Include $Include -where $where
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Filter $filter -exclude $exclude -Include $include -Force | Where-Object { $where }"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Filter $filter -exclude $exclude -Include $include -Force -ErrorAction SilentlyContinue | Where-Object { $where }"
                             }
                             else { 
                                 # 18 - Copy-LiveResponse -path $path -dest $dest -filter $filter -Exclude $exclude -Include $Include 
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Filter $filter -exclude $exclude -Include $include -Force"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Filter $filter -exclude $exclude -Include $include -Force -ErrorAction SilentlyContinue"
                             }
                         }
                         Else {
                             if ($where) {
                                 # 19 - Copy-LiveResponse -path $path -dest $dest -filter $filter -Exclude $exclude -where $where
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Filter $filter -exclude $exclude -Force | Where-Object { $where }"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Filter $filter -exclude $exclude -Force -ErrorAction SilentlyContinue | Where-Object { $where }"
                             }
                             else { 
                                 # 20 - Copy-LiveResponse -path $path -dest $dest -filter $filter -Exclude $exclude
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Filter $filter -exclude $exclude -Force"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Filter $filter -exclude $exclude -Force -ErrorAction SilentlyContinue"
                             }
                         }
                     }
@@ -183,21 +181,21 @@ function Copy-LiveResponse{
                         if ($include) {
                             if ($where) {
                                 # 21 - Copy-LiveResponse -path $path -dest $dest -filter $filter -Include $include -where $where
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Filter $filter -Include $include -Force | Where-Object { $where }"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Filter $filter -Include $include -Force -ErrorAction SilentlyContinue | Where-Object { $where }"
                             }
                             else { 
                                 # 22 - Copy-LiveResponse -path $path -dest $dest -filter $filter -Include $include
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Filter $filter -Include $include -Force"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Filter $filter -Include $include -Force -ErrorAction SilentlyContinue"
                             }
                         }
                         Else {
                             if ($where) {
                                 # 23 - Copy-LiveResponse -path $path -dest $dest -filter $filter -where $where
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Filter $filter -Force | Where-Object { $where }"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Filter $filter -Force -ErrorAction SilentlyContinue | Where-Object { $where }"
                             }
                             else {
                                 # 24 - Copy-LiveResponse -path $path -dest $dest -filter $filter
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Filter $filter -Force"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Filter $filter -Force -ErrorAction SilentlyContinue"
                             }
                         }
                     }
@@ -208,24 +206,24 @@ function Copy-LiveResponse{
                             if ($where) {
                                 # 25 - Copy-LiveResponse -path $path -dest $dest -exclude $exclude -Include $include
                                 Write-host "`t`tPlease review logic: Get-ChildItem -path '$path' -exclude $exclude best used with -recurse}"
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -exclude $exclude -Include $include -Force | Where-Object { $where }"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -exclude $exclude -Include $include -Force -ErrorAction SilentlyContinue | Where-Object { $where }"
                             }
                             else { 
                                 # 26 - Copy-LiveResponse -path $path -dest $dest -exclude $exclude -Include $include
                                 Write-host "`t`tPlease review logic: Get-ChildItem -path '$path' -exclude $exclude best used with -recurse}"
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -exclude $exclude -Include $include -Force"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -exclude $exclude -Include $include -Force -ErrorAction SilentlyContinue"
                             }
                         }
                         Else {
                             if ($where) { 
                                 # 27 - Copy-LiveResponse -path $path -dest $dest -exclude $exclude -where $where
                                 Write-host "`t`tPlease review logic: Get-ChildItem -path '$path' -exclude $exclude -Force | Where-Object { $where } best used with -recurse"
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -exclude $exclude -Force | Where-Object { $where }"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -exclude $exclude -Force -ErrorAction SilentlyContinue | Where-Object { $where }"
                             }
                             else {
                                 # 28 - Copy-LiveResponse -path $path -dest $dest -exclude $exclude (not reccomended without recurse)
                                 Write-host "`t`tPlease review logic: Get-ChildItem -path '$path' -exclude $exclude -Force best used with -recurse"
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -exclude $exclude -Force"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -exclude $exclude -Force -ErrorAction SilentlyContinue"
                             }
                         }
                     }
@@ -233,21 +231,21 @@ function Copy-LiveResponse{
                         if ($include) {
                             if ($where) { 
                                 # 29 - Copy-LiveResponse -path $path -dest $dest -include -where $where
-                                $items = Invoke-Expression "Get-ChildItem -path '$path'  -Include $include -Force | Where-Object { $where }"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path'  -Include $include -Force -ErrorAction SilentlyContinue | Where-Object { $where }"
                             }
                             else { 
                                 # 30 - Copy-LiveResponse -path $path -dest $dest -include
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Include $include -Force"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Include $include -Force -ErrorAction SilentlyContinue"
                             }
                         }
                         Else {
                             if ($where) { 
                                 # 31 - Copy-LiveResponse -path $path -dest $dest -where $where
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Force | Where-Object { $where }"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Force -ErrorAction SilentlyContinue | Where-Object { $where }"
                             }
                             else { 
                                 # 32 - Copy-LiveResponse -path $path -dest $dest
-                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Force"
+                                $items = Invoke-Expression "Get-ChildItem -path '$path' -Force -ErrorAction SilentlyContinue"
                             }
                         }
                     }
@@ -260,10 +258,18 @@ function Copy-LiveResponse{
 
             # If results of search bulid Target table
             $items | Where-Object { !$_.PSIsContainer -And $_.FullName } | ForEach-Object {
-                $out = $_.FullName -replace [regex]::escape($path), $dest
-                $fileSize = (Get-Item $_.FullName -Force).length
-                # kernel locked files may fail silentlycontinue in hash function
-                $FileHash = Get-FileHash $_.FullName -Algorithm SHA256 | Select-Object sha256
+                $out = $_.FullName -replace [regex]::escape($path.trim("\")), $dest
+
+                # This line is to exclude VSS mounts from loose recursive queries the VSS will be covered
+                # during -vss search
+                If ($_.FullName -like "C:\Windows\Temp\VSS*" -and $out -like "$dest\Windows\Temp\vss*") {
+                    return
+                }
+               
+                # kernel locked files may fail silentlycontinue in filesize ad hash function
+                $fileSize = (Get-Item $($_.FullName) -Force -ErrorAction SilentlyContinue).length
+                $FileHash = Get-Hash -path $($_.FullName) -Algorithm SHA256 | Select-Object sha256
+
                 $CopyTargets[$CopyTargets.count] = @($_.FullName,$out,$fileSize,$FileHash.sha256)
             }
 
@@ -288,7 +294,7 @@ function Copy-LiveResponse{
                         }
                         Catch {
                             try { 
-                                Copy-Item -Path $ItemIn -Destination $ItemOut -Force 
+                                Copy-Item -Path $ItemIn -Destination $ItemOut -Force -ErrorAction stop
                                 if ($Verbose) { Write-Host "INFO: $itemIn fell back to Copy-Item." }
                                 $LogAction = "Copy-Item fallback"
                             }
@@ -304,7 +310,7 @@ function Copy-LiveResponse{
                         $Dedup = $Null
                         If ($VssFlag) {
                             # Checking ItemIn sha256 and comparing hashes in array that are not the same ItemIn
-                            $sha256 = (Get-FileHash -Path $ItemIn -Algorithm SHA256).sha256
+                            $sha256 = (Get-Hash -Path ($ItemIn) -Algorithm SHA256).sha256
                             foreach ($item in $copyTargets.Values){
                                 # Chack previous collections to cover previous collections
                                 If ($Global:hashlist["$sha256"]) { $Dedup = $True}
@@ -320,7 +326,7 @@ function Copy-LiveResponse{
                                 New-Item (Split-Path -Path $ItemOut) -type directory -Force | Out-Null
                             }
                             try {
-                                Copy-Item -Path $ItemIn -Destination $ItemOut -Force
+                                Copy-Item -Path $ItemIn -Destination $ItemOut -Force -ErrorAction Stop
                                 $LogAction = "Copy-Item"
                             }
                             Catch { 
