@@ -79,7 +79,7 @@ Try{
     Write-Host -ForegroundColor Red "DONE`n"
 
     Move-Item ($Target + "\Invoke-LiveResponse-master") ($Target + "\Invoke-LiveResponse") -Force
-    Remove-Item -Path "$Target\invoke-ir.zip" -Force
+    Remove-Item -Path "$Target\Invoke-LiveResponse.zip" -Force
 }
 Catch{
     Write-Host -ForegroundColor Red "Extraction Failed!"
