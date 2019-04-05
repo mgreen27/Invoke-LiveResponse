@@ -350,6 +350,23 @@ function Invoke-LiveResponse
     # CPU Priority - will be included in all Invoke-Liveresponse Scriptblocks
     $sbStart = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbStart.ps1" -raw))
 
+    If ($Verbose) { $Scriptblock = [ScriptBlock]::Create($sbStart.ToString() + "`n`$Global:verbose = `$True`n") }
+    Else { $Scriptblock = [ScriptBlock]::Create($sbStart.ToString()) }
+
+
+    # PSReflect for WinAPI in powershell!
+    If ($ForensicCopy -Or $Pf -Or $Copy -or $Custom -or $Vss){
+        $sbPSReflect = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPSReflect.ps1" -raw))
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPSReflect.ToString())
+    }
+
+
+    # Get-System only if LocalOut:$True
+    If ($ForensicCopy -Or $Pf -Or $Copy -or $Custom ){
+        $sbGetSystem = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbGetSystem.ps1" -raw))
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbGetSystem.ToString())
+    }#>
+
 
     # Path configuration  - will be included in all ForensicCopy and -LocalOut:$true sessions
     if ($LocalOut) {
@@ -368,16 +385,8 @@ function Invoke-LiveResponse
         $sbPath = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPathUnc.ps1" -raw))
         $sbPath = [ScriptBlock]::Create("`n`$Unc = `"$Unc`"`n" + $sbPath.ToString())
     }
+    $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPath.ToString())
 
-    If ($Verbose) { $Scriptblock = [ScriptBlock]::Create($sbStart.ToString() + "`n`$Global:verbose = `$True`n" + $sbPath.ToString()) }
-    Else { $Scriptblock = [ScriptBlock]::Create($sbStart.ToString() + $sbPath.ToString()) }
-
-
-    # Adding Get-Hash function for hashing requirements
-    If ($ForensicCopy -Or $Pf -Or $Copy -Or $Mem){
-        $sbGetHash = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbGetHash.ps1" -raw))
-        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbGetHash.ToString())
-    }
 
     # MemoryDump - running before all else to minimise forensic footprint
     If ($Mem -Or $All) { 
@@ -386,23 +395,11 @@ function Invoke-LiveResponse
         $ForensicCopyText = $ForensicCopyText + "`t`t`Memory Dump`n"
     }
 
-    # PSReflect for WinAPI in powershell!
-    If ($ForensicCopy -Or $Pf -Or $Copy -or $Custom -or $Vss){
-        $sbPSReflect = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPSReflect.ps1" -raw))
-        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPSReflect.ToString())
-    }
-
     # Add Volume Shadow Copy for VSS collection usecases
     If ($Vss){
         $sbVssMount = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbVssMount.ps1" -raw))
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbVssMount.ToString())
         $ForensicCopyText = $ForensicCopyText + "`t`t`Volume Shadow Copy`n"
-    }
-
-    # Get-System only if LocalOut:$True
-    If ($ForensicCopy -Or $Pf -Or $Copy -or $Custom -And $LocalOut -eq $True){
-        $sbGetSystem = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbGetSystem.ps1" -raw))
-        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbGetSystem.ToString())
     }
 
     # PowerForensics - reflectively loads PF if Raw collection configured
@@ -415,6 +412,12 @@ function Invoke-LiveResponse
 
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPowerForensics.ToString() + $sbForensicCopy.ToString())
         $PowerForensics = $True
+    }
+
+    # Adding Get-Hash function for hashing requirements
+    If ($ForensicCopy -Or $Pf -Or $Copy -Or $Mem){
+        $sbGetHash = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbGetHash.ps1" -raw))
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbGetHash.ToString())
     }
 
     # Add Copy-LiveResponse for ForensicCopy mode copy usecases
@@ -435,7 +438,7 @@ function Invoke-LiveResponse
         $sbLogFile = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\sbLogfile.ps1" -raw))    
         $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbLogFile.ToString())
         $ForensicCopyText = $ForensicCopyText + "`t`t`$LogFile`n"
-    }    
+    }
 
     # Dump of USNJrnl
     If ($Usnj -Or $Disk -Or $All){
@@ -519,6 +522,7 @@ function Invoke-LiveResponse
 
     }
 
+
     # Unmount Volume Shadow Copy
     if ($Vss) {
         $sbVssUnmount = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbVssUnmount.ps1" -raw))
@@ -531,7 +535,8 @@ function Invoke-LiveResponse
 
     # Unmap share
     if (!$LocalOut) {
-        $ScriptBlock = [ScriptBlock]::Create($Scriptblock.ToString() + "`n`n`$net.RemoveNetworkDrive(`$Map,`$true,`$true)`n")
+        #$ScriptBlock = [ScriptBlock]::Create($Scriptblock.ToString() + "`n`n`$net.RemoveNetworkDrive(`$Map,`$true,`$true)`n")
+        $ScriptBlock = [ScriptBlock]::Create($Scriptblock.ToString() + "`n`n`Unmount-NetworkPath -MapPath `$Map`n")
 	}
 
 
@@ -543,7 +548,7 @@ function Invoke-LiveResponse
         If ($LR) {
             $ForensicCopyText = $ForensicCopyText + "`t`t`LiveResponse scripts`n"
         }
-        $LocalScriptBlock = [ScriptBlock]::Create("Write-Host -ForegroundColor Cyan `"Starting Invoke-LiveResponse.`"`nWrite-Host -ForegroundColor White `"``tLocal Mode.`n`"@`"`n`n$ForensicCopyText`n`"@`n")
+       $LocalScriptBlock = [ScriptBlock]::Create("Write-Host -ForegroundColor Cyan `"Starting Invoke-LiveResponse.`"`nWrite-Host -ForegroundColor White `"``tLocal Mode.`n@`"`n`n$ForensicCopyText`n`"@`n")
 
         if ($ForensicCopy -Or $Mem) {
             $LocalScriptBlock = [ScriptBlock]::Create($LocalScriptBlock.ToString() + "Write-Host -ForegroundColor Cyan `"Starting ForensicCopy.`"`n" + "`n" + $ScriptBlock.ToString())
