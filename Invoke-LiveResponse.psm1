@@ -5,7 +5,7 @@ function Invoke-LiveResponse
     A Module for Live Response and Forensic collections. 
 
     Name: Invoke-LiveResponse.psm1
-    Version: 0.953
+    Version: 0.96
     Author: Matt Green (@mgreen27)
 
 .DESCRIPTION
@@ -150,9 +150,6 @@ function Invoke-LiveResponse
     An optional Live Response parameter that specifies the local Collector path of the Results folder in Live Response mode. Can be UNC path or share.
     e.g c:\Cases
 
-.PARAMETER csv
-    Optional parameter for specifying Live Response Output in CSV
-
 .PARAMETER Shell
     An Optional switch to invoke Shell mode instead of closing PSSession after collection. Shell mode leaves the PSSession open and allows user to Enter-PSSession for manual tasks.
 
@@ -208,6 +205,7 @@ function Invoke-LiveResponse
 
     Thank you to:
         @jaredcatkinson PowerForensics - https://github.com/Invoke-IR/PowerForensics
+        @mattifestation PSReflect - https://github.com/mattifestation/PSReflect
         Kansa project - https://github.com/davehull/Kansa
         All Powershell contributors.
 #>
@@ -241,7 +239,6 @@ function Invoke-LiveResponse
         [Parameter(Mandatory = $False)][Switch]$LR,
         [Parameter(Mandatory = $False)][String]$Content,
         [Parameter(Mandatory = $False)][String]$Results,
-        [Parameter(Mandatory = $False)][Switch]$Csv,
         [Parameter(Mandatory = $False)][Switch]$Shell
         #[Parameter(Mandatory = $False)][Switch]$Verbose
         )
@@ -269,7 +266,6 @@ function Invoke-LiveResponse
 
     # Live Response
     $LR = $PSBoundParameters.ContainsKey('LR')
-    $Csv = $PSBoundParameters.ContainsKey('Csv')
 
     # Set WinRM Defaults for Auth and Port
     If (!$Authentication){$Authentication = "Kerberos"}
@@ -283,6 +279,7 @@ function Invoke-LiveResponse
     If (!$Content){$Content = "$ScriptDir\Content"}
 
     # Input validation
+    . $PSScriptRoot\Content\Scriptblock\base\Invoke-InputValidation.ps1
     If (!$WriteScriptBlock) {
         If (!$ComputerName) {
             $ComputerName = Invoke-InputValidation -ComputerName
@@ -540,7 +537,6 @@ function Invoke-LiveResponse
 	}
 
 
-
 #### Main ####
 
     # WriteScriptBlock for local collection and testing
@@ -548,8 +544,8 @@ function Invoke-LiveResponse
         If ($LR) {
             $ForensicCopyText = $ForensicCopyText + "`t`t`LiveResponse scripts`n"
         }
-       $LocalScriptBlock = [ScriptBlock]::Create("Write-Host -ForegroundColor Cyan `"Starting Invoke-LiveResponse.`"`nWrite-Host -ForegroundColor White `"``tLocal Mode.`n@`"`n`n$ForensicCopyText`n`"@`n")
-
+        $LocalScriptBlock = [ScriptBlock]::Create("Write-Host -ForegroundColor Cyan `"Starting Invoke-LiveResponse.`"`nWrite-Host -ForegroundColor White `"``tLocal Mode.`n`"@`"`n`n$ForensicCopyText`n`"@`n")
+        
         if ($ForensicCopy -Or $Mem) {
             $LocalScriptBlock = [ScriptBlock]::Create($LocalScriptBlock.ToString() + "Write-Host -ForegroundColor Cyan `"Starting ForensicCopy.`"`n" + "`n" + $ScriptBlock.ToString())
         }
@@ -640,17 +636,19 @@ function Invoke-LiveResponse
             Write-Host -ForegroundColor Cyan "ForensicCopy over WinRM complete`n"
         }
         
-        If($LR) {
+        If($LR -and !$ForensicCopy -and !$Mem) {
             Write-Host -ForegroundColor Cyan "`nStarting LiveResponse over WinRM..."
             Write-Host "`tFrom Content `n`t$Content"
             Write-Host "`tNote: Error handling during LiveResponse mode is required to be handled in content.`n"
-            $Results = $Results + $Target + "_LR"
+            $Results = $Results + $Target + "\LiveResponse"
             Write-Host "`tTo Results `n`t$Results`n"
             $LocalOut = "`$((Get-Location).Path)"
 
             $Scripts = Get-ChildItem -Path "$Content\*.ps1"
 
-            If (Test-Path $Results) {Remove-Item $Results -Recurse -Force -ErrorAction SilentlyContinue | Out-Null}
+            If (Test-Path $Results) {
+                Remove-Item $Results -Recurse -Force -ErrorAction SilentlyContinue | Out-Null
+            }
             New-Item $Results -type directory -ErrorAction SilentlyContinue | Out-Null
 
             Foreach ($Script in $Scripts) {
@@ -659,19 +657,14 @@ function Invoke-LiveResponse
                 Invoke-Command -Session $Session -Scriptblock {[gc]::collect()}
 
                 # depending on Content we can strip properties from Format-List results with | Select-Object below
-                try{$ScriptResults = Invoke-Command -Session $Session -FilePath $Script.FullName -ErrorAction Stop} #| Select-Object -Property * -ExcludeProperty PSComputerName,RunspaceID
+                try{
+                    $ScriptResults = Invoke-Command -Session $Session -FilePath $Script.FullName -ErrorAction Stop
+                    $ScriptResults | Out-File ($Results + "\" + $Script.BaseName + ".txt")
+                    $ScriptResults = $Null
+                }
                 catch{
                     Write-Host -ForegroundColor Red "`tError in $script"
                     $ScriptResults = $Null
-                }
-
-                If (!$csv) {
-                    $ScriptResults | Out-File ($Results + "\" + $Script.BaseName + ".txt")
-                }
-                ElseIf ($csv) {
-                    $delim = ","
-                    $ScriptResults | convertto-csv -NoTypeInformation | % { $_ -replace "`"$delim`"", "$delim"} | % { $_ -replace "^`"",""} | % { $_ -replace "`"$",""} | % { $_ -replace "`"$delim","$delim"}
-                    $ScriptResults | Out-File ($Results + "\" + $Script.BaseName + ".csv") -Encoding ascii
                 }
             }
 
@@ -708,88 +701,3 @@ function Invoke-LiveResponse
         Remove-PSSession -Session $Session
     }
 }
-
-
-function Invoke-InputValidation
-{
-    [CmdletBinding()]
-    Param(
-        [Parameter(Mandatory = $False)][String]$Map,
-        [Parameter( Mandatory = $False)][String]$UNC,
-        [Parameter(Mandatory = $False)][String]$Content,
-        [Parameter(Mandatory = $False)][String]$Results,
-        [Parameter(Mandatory = $False)][Switch]$ComputerName,
-        [Parameter(Mandatory = $False)][Switch]$Credential
-        )
-
-    If ($UNC) {
-        while ($UNC.split(',')[0] -notmatch "\\\\([\w\-\.]+|\b(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\b)\\[\w\-\.]+"`
-            -or $UNC.split(',')[1] -notmatch "([a-zA-Z][a-zA-Z0-9\-\.]{0,61}[a-zA-Z]\\\w[\w\.\- ]*)?"`
-            -or $UNC.split(',')[2] -notmatch "(\w+)?" -or !($Map.split(',').Length -eq 1 -or 3)){
-            Clear-Host
-            Write-Host -ForegroundColor Cyan "`nInvoke-LiveResponse`n"
-            Write-Host -ForegroundColor Yellow "Input validation ForensicCopy -UNC"
-            Write-Host "Enter UNC path and credentials required to run Net Use command on $ComputerName"
-            Write-Host "e.g`t\\<Servername or IP>\Share,<domain>\<username>,<password>"
-            Write-Host "or `t\\<Servername or IP>\Share"
-            $UNC = Read-Host -Prompt "UNC path and credentials"
-        }
-        Clear-Host
-        return $UNC            
-    }
-
-    If ($Content) {
-        while ($Content -notmatch "^[a-zA-Z]:\\(((?![<>:\`"\/\\|?*]).)+((?<![ .])\\)?)*$") {
-            Clear-Host
-            Write-Host -ForegroundColor Cyan "`nInvoke-LiveResponse`n"
-            Write-Host -ForegroundColor Yellow "Input validation LiveResponse -Content"
-            Write-Host "Local folder containing Powershell content"
-            Write-Host "e.g C:\scripts\dfir"
-            $Content = Read-Host -Prompt "Enter content folder" 
-        }
-        $Content = $Content.Trim()
-        $Content = $Content.TrimEnd("\")
-        $Content = $Content.Trim()
-        Clear-Host
-        return $Content
-    }
-    
-    If ($Results) {
-        while ($Results -notmatch "^[a-zA-Z]:\\(((?![<>:\`"\/\\|?*]).)+((?<![ .])\\)?)*$"){
-            Clear-Host
-            Write-Host -ForegroundColor Cyan "`nInvoke-LiveResponse`n"
-            Write-Host -ForegroundColor Yellow "Input validation LiveResponse -Content"
-            Write-Host "Local folder to write collection results"
-            Write-Host "e.g C:\cases"
-            $Results = Read-Host -Prompt "Enter results folder"
-        }
-        $Results = $Results.Trim()
-        $Results = $Results.TrimEnd("\")
-        $Results = $Results.Trim()
-        Clear-Host
-        return $Results
-    }
-    
-    If ($ComputerName){
-        Clear-Host
-        Write-Host -ForegroundColor Cyan "`nInvoke-LiveResponse`n"
-        Write-Host -ForegroundColor Yellow "Input validation LiveResponse -ComputerName - no parameter entered for remote connection"
-        Write-Host "Enter fully qualified computer name as the remote target for Invoke-LiveResponse"
-        Write-Host "e.g workstation.example.local"
-        $ComputerNameAdded = Read-Host -Prompt "Enter remote computer name"
-        Clear-Host
-        return $ComputerNameAdded
-    }
-
-    If ($Credential){
-        Clear-Host
-        Write-Host -ForegroundColor Cyan "`nInvoke-LiveResponse`n"
-        Write-Host -ForegroundColor Yellow "Input validation LiveResponse -Credential - no parameter entered for remote connection"
-        Write-Host "Enter <domain>\<username> to use to map to $Computername"
-        Write-Host "e.g example.local\dfir"
-        $Cred = Get-Credential
-        Clear-Host
-        return $Cred
-    }
-}
-

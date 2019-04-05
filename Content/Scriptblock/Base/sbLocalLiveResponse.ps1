@@ -7,13 +7,12 @@ $Date = $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd)
 if ([System.IO.path]::GetPathRoot((Get-Location).Path) -eq (Get-Location).Path) {
     $Content = $((Get-Location).Path + 'Content')
     $Output = $((Get-Location).Path) + $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd) + "Z_" + $env:computername
-    $Results = $Output + "LR"
 }
 Else { 
     $Content = $((Get-Location).Path + '\Content')
     $Output = $((Get-Location).Path) + "\" + $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd) + "Z_" + $env:computername
-    $Results = $Output + "\LR"
 }
+$Results = $Output + "\LiveResponse"
 
 Write-Host "`tFrom Content `n`t$Content"
 Write-Host "`tNote: Error handling during LiveResponse mode is required to be handled in content.`n"
@@ -27,17 +26,14 @@ New-Item $Results -type directory -ErrorAction SilentlyContinue | Out-Null
 Foreach ($Script in $Scripts){
     Write-Host -ForegroundColor Yellow "`tRunning " $Script.Name
     [gc]::collect()
-    try { $ScriptResults = Invoke-Expression $Script.FullName -ErrorAction SilentlyContinue }
-    catch { Write-Host -ForegroundColor Red "`tError in $Script" }
-
-    # depending on Content we can strip properties from Format-List results with | Select-Object above
-    If (!$csv){
+    try { 
+        $ScriptResults = Invoke-Expression $Script.FullName -ErrorAction SilentlyContinue 
         $ScriptResults | Out-File ($Results + "\" + $Script.BaseName + ".txt")
+        $ScriptResults = $null
     }
-    ElseIf ($csv){
-        $delim = ","
-        $ScriptResults | convertto-csv -NoTypeInformation | % { $_ -replace "`"$delim`"", "$delim"} | % { $_ -replace "^`"",""} | % { $_ -replace "`"$",""} | % { $_ -replace "`"$delim","$delim"}
-        $ScriptResults | Out-File ($Results + "\" + $Script.BaseName + ".csv") -Encoding ascii
+    catch { 
+        Write-Host -ForegroundColor Red "`tError in $Script" 
+        $ScriptResults = $null
     }
 }
 
