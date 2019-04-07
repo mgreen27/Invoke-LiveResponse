@@ -7,12 +7,9 @@ function Get-System
         
         Author: @mgreen27
         Requirements: PSReflect
-
         Adapted from: https://github.com/jaredcatkinson/PSReflect-Functions
         OriginalAuthor: @jaredcatkinson
     #>
-
-    Write-Host -ForegroundColor Yellow "`tElevating to SYSTEM"
 
     $Module = New-InMemoryModule -ModuleName Get-System
 

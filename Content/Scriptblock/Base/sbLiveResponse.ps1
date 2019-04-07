@@ -1,24 +1,22 @@
 ﻿
 Write-Host -ForegroundColor Cyan "`nStarting LiveResponse."
 
-$Date = $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd)
+$Results = $Output + "\LiveResponse"
 
 # Test for root of drive
-if ([System.IO.path]::GetPathRoot((Get-Location).Path) -eq (Get-Location).Path) {
-    $Content = $((Get-Location).Path + 'Content')
-    $Output = $((Get-Location).Path) + $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd) + "Z_" + $env:computername
+if ([System.IO.path]::GetPathRoot($(Split-Path $MyInvocation.MyCommand.Path -Parent)) -eq $(Split-Path $MyInvocation.MyCommand.Path -Parent)) {
+    $Content = "$(Split-Path $MyInvocation.MyCommand.Path -Parent)Content"
 }
 Else { 
-    $Content = $((Get-Location).Path + '\Content')
-    $Output = $((Get-Location).Path) + "\" + $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd) + "Z_" + $env:computername
+    $Content = "$(Split-Path $MyInvocation.MyCommand.Path -Parent)\Content"
 }
-$Results = $Output + "\LiveResponse"
 
 Write-Host "`tFrom Content `n`t$Content"
 Write-Host "`tNote: Error handling during LiveResponse mode is required to be handled in content.`n"
 Write-Host "`tTo Results `n`t$Results`n"
 
-$Scripts = Get-ChildItem -Path "$Content\*.ps1"
+$Scripts = Get-ChildItem -Path "$Content\*.ps1" -ErrorAction SilentlyContinue
+If (!$scripts) { "INFO:`tNo LiveResponse content found" }
 
 If (Test-Path $Results) { Remove-Item $Results -Recurse -Force -ErrorAction SilentlyContinue | Out-Null }
 New-Item $Results -type directory -ErrorAction SilentlyContinue | Out-Null
@@ -27,12 +25,15 @@ Foreach ($Script in $Scripts){
     Write-Host -ForegroundColor Yellow "`tRunning " $Script.Name
     [gc]::collect()
     try { 
+        $ScriptBasename = $Script.BaseName
         $ScriptResults = Invoke-Expression $Script.FullName -ErrorAction SilentlyContinue 
-        $ScriptResults | Out-File ($Results + "\" + $Script.BaseName + ".txt")
+        $ScriptResults | Out-File ("$Results\$ScriptBaseName.txt")
+        Add-Content -Path $CollectionLog "$(get-date ([DateTime]::UtcNow) -format yyyy-MM-ddZhh:mm:ss.ffff),LiveResponse,$ScriptBasename,$Results\$ScriptBaseName.txt," -Encoding Ascii
         $ScriptResults = $null
     }
     catch { 
         Write-Host -ForegroundColor Red "`tError in $Script" 
+        Add-Content -Path $CollectionLog "$(get-date ([DateTime]::UtcNow) -format yyyy-MM-ddZhh:mm:ss.ffff),LiveResponse,ERROR: $SctiptBasename,,"
         $ScriptResults = $null
     }
 }

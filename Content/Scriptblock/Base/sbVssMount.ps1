@@ -37,7 +37,7 @@ Function Mount-VolumeShadowCopy
 
         # Create the Symbolic Link
         try { $CreateSymbolicLinkResult = $Kernel32::CreateSymbolicLink($Dest, $Path, 1) }
-        catch {Write-Host -ForegroundColor Red "ERROR: Mount-VolumeShadowCopy CreateSymbolicLink" }
+        catch {Write-Host -ForegroundColor Red "ERROR:`tMount-VolumeShadowCopy CreateSymbolicLink" }
     }
 }
 

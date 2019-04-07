@@ -1,41 +1,97 @@
 ﻿
-# Function to obtain next free drive. Add excluded drives per organisation in line 5
-function Get-NextFreeDrive {
-  68..90 | ForEach-Object { "$([char]$_):" } | 
-  Where-Object { 'd:','e:','f:','h:', 'k:', 'z:' -notcontains $_  } | 
-  Where-Object { 
-    (new-object System.IO.DriveInfo $_).DriveType -eq 'noRootdirectory' 
-  }
-}
+Function Mount-NetworkPath
+{
+<#
+    .SYNOPSIS
+        Mounts UNC share through the use of 
+        Author: @mgreen27
+        Requirements: PSReflect
+#>
+    [CmdletBinding(DefaultParameterSetName = 'ComputerName')]
+    Param(
+        [Parameter( Mandatory = $True)][ValidatePattern('\\\\.*\\.*')][String[]]$UncPath,
+        [Parameter(Mandatory = $True)][String] $Username,
+        [Parameter(Mandatory = $True)][String] $Password
+    )
 
-# set variables
-$Map = (Get-NextFreeDrive)[-1]
-$Unc = $Unc.split(',')
-$Date = $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd)
-$net = (new-object -ComObject WScript.Network)
+    function Get-NextFreeDrive {
+        68..90 | ForEach-Object { "$([char]$_):" } | 
+        Where-Object { 'd:','e:','f:','h:', 'k:', 'z:' -notcontains $_  } | 
+        Where-Object { 
+            (new-object System.IO.DriveInfo $_).DriveType -eq 'noRootdirectory' 
+        }
+    }
+    $Drive = (Get-NextFreeDrive)[-1]
 
+    $Module = New-InMemoryModule -ModuleName WNetAddConnection2W
 
-Try {
-    if (test-path $Map) {
-        If ($net.EnumNetworkDrives($Map)) { $net.RemoveNetworkDrive($Map,$true,$true) }
+    # defining Structs
+    $NETRESOURCEW = struct $Module NETRESOURCEW @{
+        dwScope       = field 0 UInt32
+        dwType        = field 1 UInt32
+        dwDisplayType = field 2 UInt32
+        dwUsage       = field 3 UInt32
+        lpLocalName   = field 4 String -MarshalAs @('LPWStr')
+        lpRemoteName  = field 5 String -MarshalAs @('LPWStr')
+        lpComment     = field 6 String -MarshalAs @('LPWStr')
+        lpProvider    = field 7 String -MarshalAs @('LPWStr')
     }
 
-    if ($Unc.count -eq 3) { $net.MapNetworkDrive($Map, $UNC[0],'FALSE',$UNC[1], $UNC[2]) }
-    Elseif ($Unc.count -eq 1) { $net.MapNetworkDrive($Map, $UNC[0],'FALSE') }
+    $FunctionDefinitions = func Mpr WNetAddConnection2W ([bool]) @($NETRESOURCEW,[String],[String],[Int32]) -EntryPoint WNetAddConnection2W -SetLastError
 
-    If (!(Test-Path $Map)) {
-        Write-Host -ForegroundColor Red "`tError: Check UNC path and credentials. Unable to Map $Map"
+    $Types = $FunctionDefinitions | Add-Win32Type -Module $Module -Namespace InvokeLiveResponse
+    $Mpr = $Types['Mpr']
+
+    $mountInfo = [Activator]::CreateInstance($NETRESOURCEW)
+    $mountInfo.dwType = 1
+    $mountInfo.lpRemoteName = $UncPath #Path
+    $mountInfo.lpLocalName = $Drive
+
+    $Result = $Mpr::WNetAddConnection2W($mountInfo, $Password, $UserName,4)
+
+    If ($Result -ne 0) {
+        Write-Host -ForegroundColor Red "ERROR:`tUNC path unable to be mounted successfully. Please check credentials and path availible."
+        Write-Host -ForegroundColor Red "`tUNC path:  $UncPath`n"
+        Unmount-NetworkPath -MapPath $Drive
         break
     }
-}
-Catch {
-    if (test-path $Map) {
-        If ($net.EnumNetworkDrives($Map)) { $net.RemoveNetworkDrive($Map,$true,$true) }
+    Elseif (-Not (Test-path $Drive)) { 
+        Write-Host -ForegroundColor Red "ERROR:`tUnable to mount $Drive. Please check UNC path permissions.`n"
+        Unmount-NetworkPath -MapPath $Drive
+        break
     }
-    Write-Host -ForegroundColor Red "`tError: Check UNC path and credentials. Unable to Map $Map"
-    break
+
+    return $Drive
 }
 
+Function Unmount-NetworkPath
+{
+<#
+    .SYNOPSIS
+        UnMounts WNetAddConnection2 share through the use of WNetCancelConnection2
+        Author: @mgreen27
+        Requirements: PSReflect
+#>
+    [CmdletBinding(DefaultParameterSetName = 'ComputerName')]
+    Param(
+        [Parameter( Mandatory = $True)][String]$MapPath
+    )
+    $Module = New-InMemoryModule -ModuleName WNetAddConnection2
+
+    $FunctionDefinitions = (func Mpr WNetCancelConnection2 ([Int32]) @([String],[Int32],[Bool]) -EntryPoint WNetCancelConnection2)
+
+    $Types = $FunctionDefinitions | Add-Win32Type -Module $Module -Namespace InvokeLiveResponse
+    $Mpr = $Types['Mpr']
+
+    $Result = $Mpr::WNetCancelConnection2($MapPath, 0, $True)
+}
+
+
+# set variables
+$Unc = $Unc.split(',')
+$Date = $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd)
+
+$Map = Mount-NetworkPath -UncPath $Unc[0] -Username $Unc[1] -Password $Unc[2]
 
 $Output = $Map + "\" + $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd) + "Z_" + $env:computername 
 
@@ -48,11 +104,16 @@ Try{
     New-Item $Output -type directory -ErrorAction SilentlyContinue | Out-Null
 }
 Catch{
-    If(Test-Path $Output -ErrorAction SilentlyContinue){
-        Write-Host "Error: $Output already exists. Previously open on removal."
-    }
+    Write-Host "INFO:`tUnable to create $Output."
 }
 
 # Setting log location as Global and creating log
-$Global:CollectionLog = "$Output\$(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd)_collection.log"
-Add-Content -Path $CollectionLog "TimeUTC,Action,Source,Destination,Sha256(Source)" -Encoding Ascii
+$Global:CollectionLog = "$Output\$(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd)_collection.csv"
+Try{ 
+    Add-Content -Path $CollectionLog "TimeUTC,Action,Source,Destination,Sha256(Source)" -Encoding Ascii -ErrorAction Stop
+}
+Catch{
+    Write-Host -ForegroundColor Red "ERROR:`tUnable to write to $Output. Please check share permissions.`n"
+    Unmount-NetworkPath -MapPath $Map
+    break
+}

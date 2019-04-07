@@ -1,17 +1,6 @@
 ﻿
 Write-Host -ForegroundColor Cyan "`nStarting LiveResponse."
 
-$Date = $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd)
-
-# Test for root of drive
-if ([System.IO.path]::GetPathRoot((Get-Location).Path) -eq (Get-Location).Path) {
-    $Content = $((Get-Location).Path + 'Content')
-    $Output = $((Get-Location).Path) + $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd) + "Z_" + $env:computername
-}
-Else { 
-    $Content = $((Get-Location).Path + '\Content')
-    $Output = $((Get-Location).Path) + "\" + $(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd) + "Z_" + $env:computername
-}
 $Results = $Output + "\LiveResponse"
 
 Write-Host "`tFrom Content `n`t$Content"
@@ -27,12 +16,15 @@ Foreach ($Script in $Scripts){
     Write-Host -ForegroundColor Yellow "`tRunning " $Script.Name
     [gc]::collect()
     try { 
+        $SctiptBasename = $Script.BaseName
         $ScriptResults = Invoke-Expression $Script.FullName -ErrorAction SilentlyContinue 
         $ScriptResults | Out-File ($Results + "\" + $Script.BaseName + ".txt")
+        Add-Content -Path $CollectionLog "$(get-date ([DateTime]::UtcNow) -format yyyy-MM-ddZhh:mm:ss.ffff),LiveResponse,$SctiptBasename,$Results\$ScriptBaseName.txt," -Encoding Ascii
         $ScriptResults = $null
     }
     catch { 
         Write-Host -ForegroundColor Red "`tError in $Script" 
+        Add-Content -Path $CollectionLog "$(get-date ([DateTime]::UtcNow) -format yyyy-MM-ddZhh:mm:ss.ffff),LiveResponse,ERROR: $SctiptBasename,," -Encoding Ascii
         $ScriptResults = $null
     }
 }
