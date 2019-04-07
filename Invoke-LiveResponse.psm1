@@ -240,7 +240,6 @@ function Invoke-LiveResponse
         [Parameter(Mandatory = $False)][String]$Content,
         [Parameter(Mandatory = $False)][String]$Results,
         [Parameter(Mandatory = $False)][Switch]$Shell
-        #[Parameter(Mandatory = $False)][Switch]$Verbose
         )
     
     # Set switches
@@ -351,18 +350,10 @@ function Invoke-LiveResponse
     Else { $Scriptblock = [ScriptBlock]::Create($sbStart.ToString()) }
 
 
-    # PSReflect for WinAPI in powershell!
-    If ($ForensicCopy -Or $Pf -Or $Copy -or $Custom -or $Vss){
-        $sbPSReflect = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPSReflect.ps1" -raw))
-        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPSReflect.ToString())
-    }
-
-
-    # Get-System only if LocalOut:$True
-    If ($ForensicCopy -Or $Pf -Or $Copy -or $Custom ){
-        $sbGetSystem = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbGetSystem.ps1" -raw))
-        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbGetSystem.ToString())
-    }#>
+    # PSReflect for WinAPI in powershell! # Get-System
+    $sbPSReflect = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPSReflect.ps1" -raw))
+    $sbGetSystem = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbGetSystem.ps1" -raw))
+    $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbPSReflect.ToString() + $sbGetSystem.ToString())
 
 
     # Path configuration  - will be included in all ForensicCopy and -LocalOut:$true sessions
@@ -400,8 +391,8 @@ function Invoke-LiveResponse
     }
 
     # PowerForensics - reflectively loads PF if Raw collection configured
-    If ($Raw -Or $Mft -Or $Usnj -Or $Evtx -Or $Execution -Or $Reg -Or $User -Or $Disk -Or $All -Or $Custom){
-        # Some EDR will prevent base64 reflection if -NoBase64 switch set, use byte array only. Byte array is larger size so giving option to configure both
+    If ($ForensicCopy){
+        # Some EDR will prevent base64 reflection. If -NoBase64 switch set, use byte array only. Byte array is larger size so giving option to configure both
         If ($NoBase64) { $sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPowerForensicsNoBase64.ps1" -raw)) }
         Else { $sbPowerForensics = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbPowerForensics.ps1" -raw)) }
 
@@ -411,17 +402,13 @@ function Invoke-LiveResponse
         $PowerForensics = $True
     }
 
-    # Adding Get-Hash function for hashing requirements
-    If ($ForensicCopy -Or $Pf -Or $Copy -Or $Mem){
+    # Adding Get-Hash andd Copy-LiveResponse function for copying requirements
+    If ($ForensicCopy){
         $sbGetHash = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbGetHash.ps1" -raw))
-        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbGetHash.ToString())
-    }
-
-    # Add Copy-LiveResponse for ForensicCopy mode copy usecases
-    If ($ForensicCopy -Or $Pf -Or $Copy){
         $sbCopyLiveResponse = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbCopyLiveResponse.ps1" -raw))
-        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbCopyLiveResponse.ToString())
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbGetHash.ToString() + $sbCopyLiveResponse.ToString())
     }
+ 
 
     # $MFT collection
     If ($Mft -Or $Disk -Or $All){
@@ -527,57 +514,72 @@ function Invoke-LiveResponse
     }
 
     # View ForensicCopy collected files
-    $sbViewCollection = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbViewCollection.ps1" -raw))
-    $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbViewCollection.ToString())
-
-    # Unmap share
+    If ($ForensicCopy -or $Pf -Or $mem) {
+        $sbViewCollection = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbViewCollection.ps1" -raw))
+        $Scriptblock = [ScriptBlock]::Create($Scriptblock.ToString() + $sbViewCollection.ToString())
+    }
+    # Unmap seperate in LiveResponse mode ad not required for localout.
     if (!$LocalOut) {
-        #$ScriptBlock = [ScriptBlock]::Create($Scriptblock.ToString() + "`n`n`$net.RemoveNetworkDrive(`$Map,`$true,`$true)`n")
         $ScriptBlock = [ScriptBlock]::Create($Scriptblock.ToString() + "`n`n`Unmount-NetworkPath -MapPath `$Map`n")
 	}
 
 
 #### Main ####
 
-    # WriteScriptBlock for local collection and testing
+    # WriteScriptBlock locally for script based execution and testing
     if ($WriteScriptBlock) {
-        If ($LR) {
-            $ForensicCopyText = $ForensicCopyText + "`t`t`LiveResponse scripts`n"
-        }
-        $LocalScriptBlock = [ScriptBlock]::Create("Write-Host -ForegroundColor Cyan `"Starting Invoke-LiveResponse.`"`nWrite-Host -ForegroundColor White `"``tLocal Mode.`n`"@`"`n`n$ForensicCopyText`n`"@`n")
+        If ($LR) { $ForensicCopyText = $ForensicCopyText + "`t`t`LiveResponse scripts`n" }
+        $OutScriptBlock = [ScriptBlock]::Create("Write-Host -ForegroundColor Cyan `"Starting Invoke-LiveResponse.`"`nWrite-Host -ForegroundColor White `"``tLocal Mode.`n`"@`"`n`n$ForensicCopyText`n`"@`n")
         
-        if ($ForensicCopy -Or $Mem) {
-            $LocalScriptBlock = [ScriptBlock]::Create($LocalScriptBlock.ToString() + "Write-Host -ForegroundColor Cyan `"Starting ForensicCopy.`"`n" + "`n" + $ScriptBlock.ToString())
+        # ForensicCopy UNC path and localout already configured in $Scriptblock
+        if ($ForensicCopy -Or $Pf -Or $Mem) {
+            $OutScriptBlock = [ScriptBlock]::Create($OutScriptBlock.ToString() + "Write-Host -ForegroundColor Cyan `"Starting ForensicCopy.`"`n" + "`n" + $ScriptBlock.ToString())
+            If ($LR) {
+                $sbLiveResponse = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbLiveResponse.ps1" -raw))
+                $OutScriptBlock = [ScriptBlock]::Create($OutScriptblock.ToString() + $sbLiveResponse.ToString())
+                
+                If (!$LocalOut) { $OutScriptBlock = [ScriptBlock]::Create($OutScriptblock.ToString() + "`n`nUnmount-NetworkPath -MapPath `$Map`n") }
+            }
+        }
+        # Only LR mode configured with localout:$true
+        Elseif ($LR -and $LocalOut -eq $true) {
+            $sbLiveResponse = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbLiveResponse.ps1" -raw))
+            $OutScriptBlock = [ScriptBlock]::Create($ScriptBlock.ToString() +$OutScriptblock.ToString() + $sbLiveResponse.ToString())
+        }
+        # Only LR mode with UNC configuration
+        ELseif ($LR -and !$ForensicCopy -and !$LocalOut) {
+            $sbLiveResponse = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbLiveResponse.ps1" -raw))
+            $OutScriptBlock = [ScriptBlock]::Create($ScriptBlock.ToString() + $OutScriptblock.ToString() + $sbLiveResponse.ToString())
+            $OutScriptBlock = [ScriptBlock]::Create($OutScriptblock.ToString() + "`n`n`Unmount-NetworkPath -MapPath `$Map`n")
+        }
+        # Only LR mode with localout as path
+        Else{
+            $sbLiveResponse = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbLiveResponse.ps1" -raw))
+            $OutScriptBlock = [ScriptBlock]::Create($ScriptBlock.ToString() +$OutScriptblock.ToString() + $sbLiveResponse.ToString())
         }
 
-        if ($LR) {
-            $sbLocalLiveResponse = [System.Management.Automation.ScriptBlock]::Create((get-content "$PSScriptRoot\Content\Scriptblock\base\sbLocalLiveResponse.ps1" -raw))
-            $LocalScriptblock = [ScriptBlock]::Create($LocalScriptblock.ToString() + "`n" + $sbLocalLiveResponse.ToString())
-        }
+        # Test for root of drive as paths handled slightly differently
+        if ([System.IO.path]::GetPathRoot((Get-Location).Path) -eq (Get-Location).Path) { $Output = (Get-Location).Path }
+        Else { $Output = (Get-Location).Path + "\" }
 
-        # Test for root of drive
-        if ([System.IO.path]::GetPathRoot((Get-Location).Path) -eq (Get-Location).Path) {
-            $Output = (Get-Location).Path
-        }
-        Else { 
-            $Output = (Get-Location).Path + "\"
-        }
-		$LocalScriptblock | Out-String -Width 4096 | Out-File "$Output$($date)_Invoke-LiveResponse.ps1"
+		$OutScriptblock | Out-String -Width 4096 | Out-File "$Output$($date)_Invoke-LiveResponse.ps1"
         
         Clear-Host
         Write-host -ForegroundColor Cyan "`nInvoke-LiveResponse"
         Write-Host -ForegroundColor White "`n`tWriteScriptblock"
         Write-Host -ForegroundColor White "`tScript:`t`t$Output$($date)_Invoke-LiveResponse.ps1"
 
+        # build display to user on selected switches
         $Switches = $PSBoundParameters.Keys
         $Switches = $Switches | Where-Object { $_ -ne 'Computername' -And $_ -ne 'Credential' -And $_ -ne 'UNC' -And $_ -ne 'Localout' -And $_ -ne 'WriteScriptblock' }
         Write-Host -ForegroundColor White "`tSwitches:`t-$($Switches -join ", -")"
         
         If ($LocalOut){ Write-Host -ForegroundColor White "`tLocalOut:`t$LocalOut" }
         Else { Write-Host -ForegroundColor White "`tUnc config:`t$Unc" }
+
         Write-Host -ForegroundColor White "`nTo view script: Get-Content $Output$($date)_Invoke-LiveResponse.ps1`n"
 	}
-    # WinRM execution
+    # Original WinRM execution
     else {
         Write-Host -ForegroundColor Cyan "`nInvoke-LiveResponse"
         
@@ -622,7 +624,8 @@ function Invoke-LiveResponse
             Break
         }
 
-        If($ForensicCopy) {
+        # Run if ForensicCopy mode
+        If($ForensicCopy -or $mem) {
             Write-Host -ForegroundColor Cyan "`nStarting ForensicCopy over WinRM..."
             If ($LocalOut) { Write-Host "`tLocalOut Path: " $LocalOut }
             Else { Write-Host "`tUNC Path: " $UNC.split(',')[0] }
@@ -635,8 +638,8 @@ function Invoke-LiveResponse
 
             Write-Host -ForegroundColor Cyan "ForensicCopy over WinRM complete`n"
         }
-        
-        If($LR -and !$ForensicCopy -and !$Mem) {
+        # Run if LiveResponse mode (kansa style)
+        If($LR) {
             Write-Host -ForegroundColor Cyan "`nStarting LiveResponse over WinRM..."
             Write-Host "`tFrom Content `n`t$Content"
             Write-Host "`tNote: Error handling during LiveResponse mode is required to be handled in content.`n"
@@ -651,19 +654,41 @@ function Invoke-LiveResponse
             }
             New-Item $Results -type directory -ErrorAction SilentlyContinue | Out-Null
 
+            # create LiveResponse mode log
+            $CollectionLog = "$((get-item $Results ).parent.FullName)\$(get-date ([DateTime]::UtcNow) -format yyyy-MM-dd)_collection.csv"
+            Try{ 
+                # If CollectionLog doesnt exist add header, elsejust add results
+                If (!( Test-Path $CollectionLog )) {
+                    Add-Content -Path $CollectionLog "TimeUTC,Action,Source,Destination,Sha256(Source)" -Encoding Ascii -ErrorAction Stop
+                }
+            }
+            Catch{
+                Write-Host -ForegroundColor Red "ERROR:`tUnable to write to $CollectionLog. Please check permissions.`n"
+            }
+
+            # running PSReflect if not run previously
+            If (!$ForensicCopy -or !$Mem) {
+                # PSReflect for WinAPI in powershell! # Get-System
+                Invoke-Command -Session $Session -Scriptblock $sbPSReflect
+                Invoke-Command -Session $Session -Scriptblock $sbGetSystem
+            }
+
             Foreach ($Script in $Scripts) {
                 Write-Host -ForegroundColor Yellow "`tRunning " $Script.Name
                 
                 Invoke-Command -Session $Session -Scriptblock {[gc]::collect()}
 
-                # depending on Content we can strip properties from Format-List results with | Select-Object below
+                # depending on Content we can also strip properties from Format-List results with | Select-Object below
                 try{
                     $ScriptResults = Invoke-Command -Session $Session -FilePath $Script.FullName -ErrorAction Stop
-                    $ScriptResults | Out-File ($Results + "\" + $Script.BaseName + ".txt")
+                    $ScriptBasename = $Script.BaseName
+                    $ScriptResults | Out-File ("$Results\$ScriptBaseName.txt")
+                    Add-Content -Path $CollectionLog "$(get-date ([DateTime]::UtcNow) -format yyyy-MM-ddZhh:mm:ss.ffff),LiveResponse,$ScriptBasename,$Results\$ScriptBaseName.txt" -Encoding Ascii
                     $ScriptResults = $Null
                 }
                 catch{
                     Write-Host -ForegroundColor Red "`tError in $script"
+                    Add-Content -Path $CollectionLog "$(get-date ([DateTime]::UtcNow) -format yyyy-MM-ddZhh:mm:ss.ffff),LiveResponse,ERROR: $SctiptBasename," -Encoding Ascii
                     $ScriptResults = $Null
                 }
             }
