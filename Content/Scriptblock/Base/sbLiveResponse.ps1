@@ -33,7 +33,7 @@ Foreach ($Script in $Scripts){
     }
     catch { 
         Write-Host -ForegroundColor Red "`tError in $Script" 
-        Add-Content -Path $CollectionLog "$(get-date ([DateTime]::UtcNow) -format yyyy-MM-ddZhh:mm:ss.ffff),LiveResponse,ERROR: $SctiptBasename,,"
+        Add-Content -Path $CollectionLog "$(get-date ([DateTime]::UtcNow) -format yyyy-MM-ddZhh:mm:ss.ffff),LiveResponse,ERROR: $ScriptBasename,,"
         $ScriptResults = $null
     }
 }
