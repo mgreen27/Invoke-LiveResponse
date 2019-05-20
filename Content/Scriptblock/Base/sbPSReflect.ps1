@@ -4,6 +4,7 @@
 # Comments removed to aviod AV detection - https://github.com/m_a_t_t_i_f_e_s_t_a_t_i_o_n/PSReflect
 
 function New-InMemoryModule
+{
     Param
     (
         [Parameter(Position = 0)]
