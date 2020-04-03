@@ -15,7 +15,7 @@ The current scope of [Invoke-LiveResponse](https://mgreen27.github.io/posts/2018
 
 #### Can be run:
 * Over WinRM (original use)
-* Locally by leveraging the -WriteSctiptBlock -LocalOut:$True switches to build a local collection script.
+* Locally by leveraging the -WriteScriptBlock -LocalOut:$True switches to build a local collection script.
 * Invoke-LiveResponse supports Powershell 2.0 targets and above (excluding custom content)
 
 
