@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Invoke-BAMParser.ps1 parses BAM entries from SYSTEM registry hive.
     
@@ -57,21 +57,33 @@ Param(
 $Output=@()
 $Users=$null
 
-
 # MAIN
 if (!(Get-PSDrive -Name HKLM -PSProvider Registry)){
     Try{New-PSDrive -Name HKLM -PSProvider Registry -Root HKEY_LOCAL_MACHINE}
     Catch{"Error Mounting HKEY_Local_Machine"}
 }
 
-Try{$Users = Get-ChildItem -Path "HKLM:\SYSTEM\CurrentControlSet\Services\bam\UserSettings\" -ErrorAction Stop| Select-Object -ExpandProperty PSChildName}
+Try{
+    $Users = Get-ChildItem -Path "HKLM:\SYSTEM\CurrentControlSet\Services\bam\UserSettings\" -ErrorAction Stop| Select-Object -ExpandProperty PSChildName
+    $Legacy = $true
+}
 Catch{
-    "Error Parsing BAM Key. Likley unsupported Windows Version"
-    exit
+    Try{
+        $Users = Get-ChildItem -Path "HKLM:\SYSTEM\CurrentControlSet\Services\bam\State\UserSettings\" -ErrorAction Stop| Select-Object -ExpandProperty PSChildName
+    }
+    Catch{
+        "Error Parsing BAM Key. Likley unsupported Windows Version"
+        exit
+    }
 }
 
 Foreach ($Sid in $Users){
-    $Items = Get-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Services\bam\UserSettings\$Sid"-ErrorAction SilentlyContinue | Select-Object -ExpandProperty Property
+    if($Legacy){
+        $Items = Get-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Services\bam\UserSettings\$Sid"-ErrorAction SilentlyContinue | Select-Object -ExpandProperty Property
+    }
+    else{
+        $Items = Get-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Services\bam\State\UserSettings\$Sid"-ErrorAction SilentlyContinue | Select-Object -ExpandProperty Property
+    }
 
     # Enumerating User - will roll back to SID on error
     Try{
@@ -82,7 +94,12 @@ Foreach ($Sid in $Users){
     Catch{$User=""}
 
     Foreach ($Item in $Items){
-        $Key = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\bam\UserSettings\$Sid" | Select-Object -ExpandProperty $Item
+        if($Legacy){
+            $Key = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\bam\UserSettings\$Sid" | Select-Object -ExpandProperty $Item
+        }
+        else{
+            $Key = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\bam\State\UserSettings\$Sid" | Select-Object -ExpandProperty $Item
+        }
         
         If($key.length -eq 24){
             $Hex=[System.BitConverter]::ToString($key[7..0]) -replace "-",""
